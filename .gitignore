@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+cache/
+data/artifacts/
+*.pt
+.env
+.modal/
+implementation_plan.md
