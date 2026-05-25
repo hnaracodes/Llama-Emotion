@@ -1,0 +1,3 @@
+# Local test runner (install into .venv only)
+-r requirements.txt
+pytest>=8.0.0

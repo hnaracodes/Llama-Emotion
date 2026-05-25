@@ -1,0 +1,5 @@
+# Phase 1b vLLM serving benchmarks (optional — installed on Modal vllm_image only)
+vllm>=0.8.0,<0.11
+huggingface-hub>=0.24.0
+sentencepiece>=0.2.0
+protobuf>=4.25.0

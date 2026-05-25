@@ -4,7 +4,7 @@ Hybrid brain-inspired system: **4-bit quantized Llama 3.2** (context stream) + *
 
 ## Architecture
 
-- **Context stream:** Llama-3.2-1B-Instruct with NF4 weights (bitsandbytes); optional KV INT8/INT4 via LMDeploy (Phase 1b).
+- **Context stream:** Llama-3.2-1B-Instruct with NF4 weights (bitsandbytes); KV memory via HF `QuantizedDynamicCache` (hook-compatible) + vLLM FP8 serving benchmarks (Phase 1b).
 - **Affective stream:** TRIBEv2 → 32-d compression → delta-mod spikes → LIF SNN → neuromodulatory hooks on Llama layers.
 
 ## Prerequisites
@@ -14,7 +14,7 @@ Hybrid brain-inspired system: **4-bit quantized Llama 3.2** (context stream) + *
 3. Create Modal secret:
 
 ```bash
-modal secret create saa-hf-secret HF_TOKEN=<your_huggingface_token>
+modal secret create huggingface-secret HF_TOKEN=<your_huggingface_token>
 ```
 
 ## Quick start
@@ -25,8 +25,11 @@ pip install -r requirements.txt
 # Phase 1a: 4-bit weight benchmark on Modal GPU
 modal run benchmark_phase1a.py
 
-# Phase 1b: KV cache memory comparison
+# Phase 1b: KV cache (HF analytic + quantized cache)
 modal run benchmark_phase1b.py
+
+# Phase 1b: vLLM serving benchmark (auto vs fp8 KV, Python 3.12 image)
+modal run benchmark_phase1b_vllm.py
 
 # Phase 2–3: affective pipeline (synthetic or TRIBEv2)
 modal run train_snn.py --stub
@@ -40,11 +43,14 @@ modal run run_hybrid.py
 | Component | Phase | Method |
 |-----------|-------|--------|
 | **Weights** | 1a | bitsandbytes NF4 (`load_in_4bit=True`) |
-| **KV cache** | 1b | `QuantizedDynamicCache` (INT8/INT4) in Hugging Face + LMDeploy `quant_policy` benchmarks |
+| **KV cache (hooks)** | 1b | `QuantizedDynamicCache` INT8/INT4 in Hugging Face |
+| **KV cache (serving)** | 1b | vLLM `kv_cache_dtype=auto` vs `fp8` |
 
 Do not describe Phase 1a as "INT4 KV cache" — bnb quantizes weights only.
 
-**Deep dive:** [docs/kv_cache_and_quantization.md](docs/kv_cache_and_quantization.md) — what KV cache is, why INT4/INT8 help long context, and how Phase 1b is implemented.
+**Deep dive:** [docs/kv_cache_and_quantization.md](docs/kv_cache_and_quantization.md)
+
+Optional vLLM deps: `pip install -r requirements-vllm.txt` (Modal `vllm_image` installs these automatically).
 
 ## Licenses
 
@@ -53,4 +59,4 @@ Do not describe Phase 1a as "INT4 KV cache" — bnb quantizes weights only.
 
 ## Project layout
 
-See `implementation_plan.md` and `docs/benchmarks.md`.
+See `docs/benchmarks.md`.

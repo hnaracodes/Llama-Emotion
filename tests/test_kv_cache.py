@@ -1,12 +1,15 @@
 """Tests for KV quantize/dequant and storage accounting."""
 
+import pytest
 import torch
 
 from src.llm.kv_cache import (
-    QuantizedDynamicCache,
+    QuantizedDynamicLayer,
     _dequantize_asymmetric,
     _quantize_asymmetric,
 )
+
+pytest.importorskip("transformers")
 
 
 def test_quantize_roundtrip_int8():
@@ -18,19 +21,19 @@ def test_quantize_roundtrip_int8():
 
 
 def test_quantized_cache_storage_smaller_than_fp16():
-    cache_q = QuantizedDynamicCache(bits=8)
+    layer = QuantizedDynamicLayer(bits=8)
     k = torch.randn(1, 8, 16, 128, dtype=torch.float16)
     v = torch.randn(1, 8, 16, 128, dtype=torch.float16)
-    cache_q.update(k, v, layer_idx=0)
-    q_bytes = cache_q.storage_bytes()
+    layer.update(k, v)
+    q_bytes = layer.storage_bytes()
     fp_bytes = k.nbytes + v.nbytes
     assert q_bytes < fp_bytes
 
 
 def test_cache_grows_seq_length():
-    cache = QuantizedDynamicCache(bits=8)
+    layer = QuantizedDynamicLayer(bits=8)
     for _ in range(3):
         k = torch.randn(1, 8, 4, 128, dtype=torch.float16)
         v = torch.randn(1, 8, 4, 128, dtype=torch.float16)
-        cache.update(k, v, layer_idx=0)
-    assert cache.get_seq_length(0) == 12
+        layer.update(k, v)
+    assert layer.get_seq_length() == 12

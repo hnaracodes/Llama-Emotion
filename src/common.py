@@ -4,7 +4,6 @@ import modal
 
 from src.config import (
     APP_NAME,
-    ARTIFACTS_MOUNT,
     MODEL_CACHE_DIR,
     VOLUME_NAME,
 )
@@ -13,10 +12,15 @@ app = modal.App(APP_NAME)
 
 model_volume = modal.Volume.from_name(VOLUME_NAME, create_if_missing=True)
 
-# HF cache + project artifacts on the volume
+# HF cache + project artifacts share one volume mount (Modal forbids duplicate mounts).
 volume_mounts = {
     MODEL_CACHE_DIR: model_volume,
-    ARTIFACTS_MOUNT: model_volume,
+}
+
+_hf_env = {
+    "HF_HOME": MODEL_CACHE_DIR,
+    "TRANSFORMERS_CACHE": MODEL_CACHE_DIR,
+    "TOKENIZERS_PARALLELISM": "false",
 }
 
 image = (
@@ -32,15 +36,20 @@ image = (
         "huggingface-hub>=0.24.0",
         "sentencepiece>=0.2.0",
         "protobuf>=4.25.0",
-        "lmdeploy>=0.6.0",
     )
-    .env(
-        {
-            "HF_HOME": MODEL_CACHE_DIR,
-            "TRANSFORMERS_CACHE": MODEL_CACHE_DIR,
-            "TOKENIZERS_PARALLELISM": "false",
-        }
+    .env(_hf_env)
+)
+
+# Phase 1b vLLM serving (Python 3.12, separate heavy image)
+vllm_image = (
+    modal.Image.debian_slim(python_version="3.12")
+    .pip_install(
+        "vllm>=0.8.0,<0.11",
+        "huggingface-hub>=0.24.0",
+        "sentencepiece>=0.2.0",
+        "protobuf>=4.25.0",
     )
+    .env(_hf_env)
 )
 
 # TRIBEv2 needs extra deps; use a separate image for affective pipeline
@@ -51,12 +60,13 @@ affective_image = image.pip_install(
 
 # Mount local package for Modal functions
 image = image.add_local_python_source("src")
+vllm_image = vllm_image.add_local_python_source("src")
 affective_image = affective_image.add_local_python_source("src")
 
 
 def hf_secret() -> modal.Secret:
-    """Requires: modal secret create saa-hf-secret HF_TOKEN=<your_hf_token>"""
-    return modal.Secret.from_name("saa-hf-secret")
+    """Requires: modal secret create huggingface-secret HF_TOKEN=<your_hf_token>"""
+    return modal.Secret.from_name("huggingface-secret")
 
 
 def gpu_kwargs() -> dict:
@@ -65,6 +75,17 @@ def gpu_kwargs() -> dict:
     return {
         "gpu": GPU_TYPE,
         "timeout": GPU_TIMEOUT_SEC,
+        "volumes": volume_mounts,
+        "secrets": [hf_secret()],
+    }
+
+
+def vllm_gpu_kwargs() -> dict:
+    from src.config import GPU_TYPE, VLLM_GPU_TIMEOUT_SEC
+
+    return {
+        "gpu": GPU_TYPE,
+        "timeout": VLLM_GPU_TIMEOUT_SEC,
         "volumes": volume_mounts,
         "secrets": [hf_secret()],
     }

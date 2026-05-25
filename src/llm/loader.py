@@ -59,7 +59,7 @@ def load_quantized_llama(
         device_map=device_map,
         token=token,
         cache_dir=cache_dir,
-        torch_dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16,
+        dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16,
     )
     model.eval()
     return model, tokenizer
@@ -93,7 +93,7 @@ def load_fp16_baseline(
         device_map=device_map,
         token=token,
         cache_dir=cache_dir,
-        torch_dtype=dtype,
+        dtype=dtype,
     )
     model.eval()
     return model, tokenizer
@@ -207,14 +207,9 @@ def generate_with_kv_cache(
     all_ids = torch.cat([input_ids, *generated], dim=1)
     text = tokenizer.decode(all_ids[0], skip_special_tokens=True)
 
-    from src.llm.kv_cache import fp16_cache_storage_bytes
+    from src.llm.kv_cache import cache_storage_bytes
 
-    if kv_bits == 16 and hasattr(past, "key_cache"):
-        storage = fp16_cache_storage_bytes(past)
-    elif hasattr(past, "storage_bytes"):
-        storage = past.storage_bytes()
-    else:
-        storage = 0
+    storage = cache_storage_bytes(past)
 
     stats = {
         "kv_bits": kv_bits,

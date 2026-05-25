@@ -11,7 +11,7 @@ When Llama generates text, GPU memory holds two big things:
 | What | Stored where | Grows with… | Phase in this repo |
 |------|----------------|-------------|-------------------|
 | **Model weights** | Parameters (billions) | Model size (1B, 3B, …) | **1a** — 4-bit NF4 (bitsandbytes) |
-| **KV cache** | Activations per layer | **Context length** (prompt + generated tokens) | **1b** — INT8 / INT4 KV |
+| **KV cache** | Activations per layer | **Context length** (prompt + generated tokens) | **1b** — HF INT8/INT4 + vLLM FP8 |
 
 Confusing them is common: **Phase 1a does not shrink the KV cache.** It shrinks **weights**. Phase 1b targets **KV** specifically.
 
@@ -52,42 +52,45 @@ At **32k tokens**, KV alone is on the order of **~2 GB** before weights and acti
 
 ---
 
-## What is INT4 / INT8 KV quantization?
+## What is KV quantization?
 
 ### Full precision KV (FP16 / BF16)
 
 Each number in K and V is stored as 16 bits. High fidelity; largest memory.
 
-### Quantization idea
+### Integer quant (HF `QuantizedDynamicCache`)
 
-Store K/V with fewer bits (8 or 4) using **scale** and **zero-point** (asymmetric quant):
+Store K/V with 8 or 4 bits using **scale** and **zero-point** (asymmetric quant):
 
 ```text
 quantized = round((value - min) / scale)   clamped to 0 … 2^bits-1
 reconstructed ≈ quantized * scale + min
 ```
 
-This project uses **per-token, per-head** ranges along `head_dim` (same granularity LMDeploy documents).
+This project uses **per-token, per-head** ranges along `head_dim`.
 
-### INT8 KV
+| Mode | Storage | vs FP16 KV |
+|------|---------|------------|
+| INT8 | 1 byte/value | ~2× smaller |
+| INT4 | 0.5 byte/value | ~4× smaller |
 
-- 1 byte per stored value → **~2× smaller** than FP16 KV.
-- Usually small quality loss for Llama-class models.
+The **analytic table** in benchmarks uses these theoretical sizes.
 
-### INT4 KV
+### FP8 quant (vLLM serving)
 
-- 4 bits per value → **~4× smaller** than FP16 KV.
-- Strong memory win; some models degrade badly at INT4 KV (test on your model).
+Production serving stacks (vLLM) typically use **FP8 KV cache** (`kv_cache_dtype=fp8`) with fused attention kernels—not classic INT4. FP8 gives ~2× KV savings vs FP16 with strong accuracy on many Llama models.
+
+Reference: [vLLM Quantized KV Cache](https://docs.vllm.ai/en/stable/features/quantization/quantized_kvcache/)
 
 ### Why it works (usually)
 
-Attention only needs K/V to be **close enough** that softmax rankings stay similar. Small errors in stored K/V slightly perturb scores but rarely change the argmax token every step—especially at INT8.
+Attention only needs K/V to be **close enough** that softmax rankings stay similar. Small errors in stored K/V slightly perturb scores but rarely change the argmax token every step.
 
 ### Why it’s useful *here*
 
-1. **Long affective sessions** — Stream 2 + long prompts → you want headroom for context without OOM.
+1. **Long affective sessions** — Stream 2 + long prompts → headroom for context without OOM.
 2. **Modal GPU cost** — Smaller KV → longer context on L4/A10.
-3. **Complements 1a** — W4 weights + INT8 KV is a practical stack: cheap weights *and* cheap memory for history.
+3. **Complements 1a** — W4 weights + compressed KV is a practical stack.
 
 ---
 
@@ -99,26 +102,26 @@ Attention only needs K/V to be **close enough** that softmax rankings stay simil
 BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4", ...)
 ```
 
-- **NF4** packs each weight into 4 bits with a learned-ish normal distribution codebook.
-- Matmuls often run in FP16/BF16 **compute** dtype; weights stay compressed.
-- **KV tensors are still created at full precision** in the default Hugging Face path.
+- **NF4** packs weights into 4 bits.
+- **KV tensors remain full precision** in the default Hugging Face path.
 
-### Phase 1b — three implementations in this repo
+### Phase 1b — dual path in this repo
 
 | Path | File | What it does |
 |------|------|----------------|
-| **Analytic** | `kv_benchmark.kv_comparison_table` | Math estimate of KV size at 512/2k/8k tokens |
-| **HF quantized cache** | `src/llm/kv_cache.py` → `QuantizedDynamicCache` | Stores K/V as INT8/INT4; dequantizes when layer reads cache |
-| **LMDeploy** | `kv_benchmark.run_lmdeploy_kv_benchmark` | `TurbomindEngineConfig(quant_policy=8 or 4)` — production-style serving |
+| **Analytic** | `kv_benchmark.kv_comparison_table` | Theoretical FP16 / INT8 / INT4 sizes |
+| **HF quantized cache** | `src/llm/kv_cache.py` → `QuantizedDynamicCache` | INT8/INT4 storage; **Phase 4 hooks compatible** |
+| **vLLM serving** | `kv_benchmark.run_vllm_kv_benchmark` | `kv_cache_dtype=auto` vs `fp8` on Python 3.12 Modal image |
 
 Run on Modal:
 
 ```bash
-modal run benchmark_phase1b.py
-modal run benchmark_phase1b.py --no-lmdeploy   # skip LMDeploy if model unsupported
+modal run benchmark_phase1b.py           # analytic + HF at 512, 2048, 8192
+modal run benchmark_phase1b.py --skip-8192
+modal run benchmark_phase1b_vllm.py      # vLLM auto vs fp8 (heavy image)
 ```
 
-Results: `/artifacts/benchmarks/phase1b_kv.json` on volume `saa-models`.
+Results merge into `/artifacts/benchmarks/phase1b_kv.json` on volume `saa-models`.
 
 ---
 
@@ -127,23 +130,24 @@ Results: `/artifacts/benchmarks/phase1b_kv.json` on volume `saa-models`.
 1. On each `update()`, new K/V blocks are **quantized** to uint8 (+ scale/zero tensors).
 2. Chunks are appended per layer (same API as `DynamicCache`).
 3. On read, chunks are **dequantized** and concatenated so Llama’s attention code is unchanged.
-4. `storage_bytes()` reports **compressed** cache size (compare to FP16 `DynamicCache`).
+4. `storage_bytes()` reports **compressed** cache size.
 
-**Caveat:** This naive path still dequantizes full K/V during forward (temporary FP tensors). **Peak VRAM** may not drop as much as LMDeploy’s fused kernels—but **stored** KV size and the INT8/INT4 *concept* are measured correctly for research.
+**Caveat:** This path dequantizes during forward. **Peak VRAM** may not drop as much as vLLM’s fused FP8 kernels—but stored KV size is measured correctly, and **hooks keep working**.
 
-**Phase 4 hooks** stay on Hugging Face + this cache until you standardize on LMDeploy for serving.
+**Phase 4 hooks** stay on Hugging Face + this cache. vLLM is for serving benchmarks only until modulation is validated on a serving stack.
 
 ---
 
-## LMDeploy `quant_policy`
+## Production serving (vLLM)
 
-| `quant_policy` | KV storage |
-|----------------|------------|
-| `0` | FP16 (default) |
-| `8` | INT8 KV |
-| `4` | INT4 KV |
+| `kv_cache_dtype` | Meaning |
+|------------------|---------|
+| `auto` | Model default (typically BF16/FP16 KV) |
+| `fp8` | FP8 KV cache + FP8 attention where supported |
 
-Reference: [LMDeploy KV quant docs](https://lmdeploy.readthedocs.io/en/latest/quantization/kv_quant.html)
+Configured in [`src/config.py`](../src/config.py) as `VLLM_KV_CACHE_DTYPES = ["auto", "fp8"]`.
+
+Modal uses a separate **`vllm_image`** (Python 3.12) — see [`src/common.py`](../src/common.py).
 
 ---
 
@@ -151,34 +155,25 @@ Reference: [LMDeploy KV quant docs](https://lmdeploy.readthedocs.io/en/latest/qu
 
 ```text
 Prompt text
-    → tokenize (seq_len tokens)
-    → For each cache mode in {FP16, INT8, INT4}:
-          past_key_values = DynamicCache() or QuantizedDynamicCache(bits)
-          forward(prompt)     # fills cache
-          forward N decode steps
-          record: kv_storage_mb, peak_vram_gb, latency, text tail
-    → (optional) LMDeploy pipeline with quant_policy 0/8/4
-    → JSON artifact
+    → HF path: tokenize → DynamicCache vs QuantizedDynamicCache → metrics
+    → vLLM path: LLM(kv_cache_dtype=auto|fp8) → generate → metrics
+    → merge into phase1b_kv.json
 ```
 
 ---
 
 ## Reading benchmark JSON
 
-Example fields:
+- `analytic_kv_table` — theoretical GB at various seq lengths (INT8/INT4 math).
+- `hf_quantized_cache_benchmarks[].modes.*.kv_storage_mb` — HF stored cache size.
+- `vllm_kv_benchmark.modes.auto_kv` / `fp8_kv` — serving path with `peak_vram_gb`, `latency_sec`, `response_preview`.
 
-- `analytic_kv_table` — theoretical GB at various seq lengths.
-- `hf_quantized_cache_benchmarks[].modes.int8_quantized_storage.kv_storage_mb` — stored cache size.
-- `hf_quantized_cache_benchmarks[].modes.fp16_dynamic.kv_storage_mb` — baseline.
-- `lmdeploy_kv_benchmark.policies.int8_kv` — serving path with real `quant_policy`.
-
-Compare **ratio** `fp16 / int8` storage (~2×) and `fp16 / int4` (~4×) to validate Phase 1b.
+**Breaking change:** `lmdeploy_kv_benchmark` → `vllm_kv_benchmark` (see [benchmarks.md](benchmarks.md)).
 
 ---
 
 ## Further reading
 
 - [Transformers bitsandbytes (weights)](https://huggingface.co/docs/transformers/en/quantization/bitsandbytes)
-- [bitsandbytes quickstart](https://huggingface.co/docs/bitsandbytes/main/quickstart)
-- [LMDeploy INT4/INT8 KV](https://lmdeploy.readthedocs.io/en/latest/quantization/kv_quant.html)
+- [vLLM Quantized KV Cache](https://docs.vllm.ai/en/stable/features/quantization/quantized_kvcache/)
 - [KVQuant research](https://github.com/SqueezeAILab/KVQuant)

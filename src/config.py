@@ -23,9 +23,17 @@ SNN_THRESHOLD = 1.0
 APP_NAME = "spiking-affective-adapter"
 VOLUME_NAME = "saa-models"
 MODEL_CACHE_DIR = "/models"
-ARTIFACTS_MOUNT = "/artifacts"
+# Artifacts live on the same Modal volume root as the HF cache (single mount).
+ARTIFACTS_MOUNT = "/models"
 GPU_TYPE = "L4"
 GPU_TIMEOUT_SEC = 600
+VLLM_GPU_TIMEOUT_SEC = 900
+
+# vLLM Phase 1b serving benchmarks
+VLLM_KV_CACHE_DTYPES = ["auto", "fp8"]
+VLLM_MAX_MODEL_LEN = 4096
+VLLM_GPU_MEMORY_UTILIZATION = 0.85
+VLLM_MAX_NEW_TOKENS = 32
 
 # Benchmark defaults
 BENCHMARK_PROMPT = (

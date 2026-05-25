@@ -1,4 +1,4 @@
-"""Phase 1b: KV-cache analytics, HF quantized cache benchmarks, LMDeploy serving benchmarks."""
+"""Phase 1b: KV-cache analytics, HF quantized cache benchmarks, vLLM serving benchmarks."""
 
 from __future__ import annotations
 
@@ -59,15 +59,22 @@ def kv_comparison_table(
 
 
 def _build_prefill_inputs(tokenizer, prompt: str, target_len: int, device: torch.device):
-    filler = " word" * max(1, target_len // 2)
-    text = (prompt + filler)[: target_len * 4]
-    inputs = tokenizer(
-        text,
-        return_tensors="pt",
-        truncation=True,
-        max_length=target_len,
-    )
-    return {k: v.to(device) for k, v in inputs.items()}
+    """Build inputs with exactly ``target_len`` tokens (pad with a repeated filler token)."""
+    encoded = tokenizer(prompt, return_tensors="pt", add_special_tokens=True)
+    input_ids = encoded["input_ids"]
+    if input_ids.shape[1] >= target_len:
+        input_ids = input_ids[:, :target_len]
+    else:
+        need = target_len - input_ids.shape[1]
+        filler_ids = tokenizer.encode(" the", add_special_tokens=False)
+        filler_id = filler_ids[0] if filler_ids else (tokenizer.eos_token_id or 0)
+        pad = torch.full((1, need), filler_id, dtype=input_ids.dtype)
+        input_ids = torch.cat([input_ids, pad], dim=1)
+    attention_mask = torch.ones_like(input_ids)
+    return {
+        "input_ids": input_ids.to(device),
+        "attention_mask": attention_mask.to(device),
+    }
 
 
 def run_hf_kv_cache_benchmark(
@@ -86,7 +93,7 @@ def run_hf_kv_cache_benchmark(
     """
     from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache
 
-    from src.llm.kv_cache import QuantizedDynamicCache, fp16_cache_storage_bytes
+    from src.llm.kv_cache import QuantizedDynamicCache, cache_storage_bytes
     from src.llm.loader import build_bnb_config
 
     cache_modes = cache_modes or [16, 8, 4]
@@ -102,7 +109,7 @@ def run_hf_kv_cache_benchmark(
         quantization_config=bnb,
         device_map="auto",
         token=token,
-        torch_dtype=dtype,
+        dtype=dtype,
     )
     model.eval()
     device = next(model.parameters()).device
@@ -150,12 +157,7 @@ def run_hf_kv_cache_benchmark(
             else 0.0
         )
 
-        if bits == 16 and hasattr(past, "key_cache"):
-            storage = fp16_cache_storage_bytes(past)
-        elif hasattr(past, "storage_bytes"):
-            storage = past.storage_bytes()
-        else:
-            storage = 0
+        storage = cache_storage_bytes(past)
 
         preview = tokenizer.decode(next_token[0], skip_special_tokens=True)
         results["modes"][mode_name] = {
@@ -177,68 +179,95 @@ def run_hf_kv_cache_benchmark(
     return results
 
 
-def run_lmdeploy_kv_benchmark(
+def run_vllm_kv_benchmark(
     model_id: str,
     prompt: str,
     *,
-    quant_policies: list[int] | None = None,
-    session_len: int = 4096,
-    max_new_tokens: int = 32,
+    kv_cache_dtypes: list[str] | None = None,
+    max_new_tokens: int | None = None,
+    max_model_len: int | None = None,
+    gpu_memory_utilization: float | None = None,
+    token: str | None = None,
 ) -> dict[str, Any]:
     """
-    LMDeploy Turbomind: quant_policy 0 = FP16 KV, 8 = INT8 KV, 4 = INT4 KV.
+    vLLM serving benchmark: compare kv_cache_dtype auto (baseline) vs fp8.
 
-    See https://lmdeploy.readthedocs.io/en/latest/quantization/kv_quant.html
+    See https://docs.vllm.ai/en/stable/features/quantization/quantized_kvcache/
     """
-    quant_policies = quant_policies or [0, 8, 4]
+    import os
+
+    from src.config import (
+        VLLM_GPU_MEMORY_UTILIZATION,
+        VLLM_KV_CACHE_DTYPES,
+        VLLM_MAX_MODEL_LEN,
+        VLLM_MAX_NEW_TOKENS,
+    )
+
+    kv_cache_dtypes = kv_cache_dtypes or list(VLLM_KV_CACHE_DTYPES)
+    max_new_tokens = max_new_tokens if max_new_tokens is not None else VLLM_MAX_NEW_TOKENS
+    max_model_len = max_model_len if max_model_len is not None else VLLM_MAX_MODEL_LEN
+    gpu_memory_utilization = (
+        gpu_memory_utilization
+        if gpu_memory_utilization is not None
+        else VLLM_GPU_MEMORY_UTILIZATION
+    )
+    hf_token = token or os.environ.get("HF_TOKEN")
+    if hf_token:
+        os.environ.setdefault("HF_TOKEN", hf_token)
+        os.environ.setdefault("HUGGING_FACE_HUB_TOKEN", hf_token)
+
     results: dict[str, Any] = {
         "model_id": model_id,
-        "engine": "lmdeploy.TurbomindEngineConfig",
-        "session_len": session_len,
-        "policies": {},
+        "engine": "vllm.LLM",
+        "max_model_len": max_model_len,
+        "modes": {},
     }
 
     try:
-        from lmdeploy import TurbomindEngineConfig, pipeline
+        from vllm import LLM, SamplingParams
     except ImportError as exc:
-        results["error"] = f"lmdeploy not installed: {exc}"
+        results["error"] = f"vllm not installed: {exc}"
         return results
 
-    for policy in quant_policies:
-        label = {0: "fp16_kv", 8: "int8_kv", 4: "int4_kv"}.get(policy, f"policy_{policy}")
+    dtype_labels = {"auto": "auto_kv", "fp8": "fp8_kv"}
+    sampling = SamplingParams(max_tokens=max_new_tokens, temperature=0)
+
+    for kv_dtype in kv_cache_dtypes:
+        label = dtype_labels.get(kv_dtype, f"{kv_dtype}_kv")
         try:
-            engine_config = TurbomindEngineConfig(
-                quant_policy=policy,
-                session_len=session_len,
-                max_batch_size=1,
-            )
             if torch.cuda.is_available():
                 torch.cuda.reset_peak_memory_stats()
                 torch.cuda.synchronize()
 
             t0 = time.perf_counter()
-            pipe = pipeline(model_id, backend_config=engine_config)
-            responses = pipe([prompt], max_new_tokens=max_new_tokens)
+            llm = LLM(
+                model=model_id,
+                kv_cache_dtype=kv_dtype,
+                max_model_len=max_model_len,
+                gpu_memory_utilization=gpu_memory_utilization,
+                trust_remote_code=True,
+            )
+            outputs = llm.generate([prompt], sampling)
             elapsed = time.perf_counter() - t0
             peak = (
                 torch.cuda.max_memory_allocated() / (1024**3)
                 if torch.cuda.is_available()
                 else 0.0
             )
-            text = responses[0].text if responses else ""
-            results["policies"][label] = {
-                "quant_policy": policy,
+            text = outputs[0].outputs[0].text if outputs and outputs[0].outputs else ""
+            results["modes"][label] = {
+                "kv_cache_dtype": kv_dtype,
                 "peak_vram_gb": round(peak, 4),
                 "latency_sec": round(elapsed, 3),
                 "response_preview": (text or "")[:300],
                 "status": "ok",
             }
-            del pipe
+            del llm
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
         except Exception as exc:
-            results["policies"][label] = {
-                "quant_policy": policy,
+            results["modes"][label] = {
+                "kv_cache_dtype": kv_dtype,
                 "status": "error",
                 "error": str(exc),
             }
@@ -252,13 +281,13 @@ def run_phase1b_full(
     *,
     token: str | None = None,
     seq_lengths: list[int] | None = None,
-    run_lmdeploy: bool = True,
+    run_vllm: bool = False,
 ) -> dict[str, Any]:
-    """Run analytic table + HF quantized cache + optional LMDeploy benchmarks."""
+    """Run analytic table + HF quantized cache + optional vLLM benchmarks."""
     from src.config import BENCHMARK_CONTEXT_LENGTHS, MODEL_ID
 
     model_id = model_id or MODEL_ID
-    seq_lengths = seq_lengths or [512, 2048]
+    seq_lengths = seq_lengths or list(BENCHMARK_CONTEXT_LENGTHS)
 
     # Llama 3.2 1B: 16 layers, 8 kv heads, 128 head dim
     analytic = kv_comparison_table(
@@ -287,19 +316,33 @@ def run_phase1b_full(
         "notes": {
             "phase_1a": "bitsandbytes NF4 quantizes model WEIGHTS only",
             "phase_1b_hf": "QuantizedDynamicCache stores K/V in INT8/INT4; dequant on read",
-            "phase_1b_lmdeploy": "Turbomind quant_policy 8/4 for production KV quant",
+            "phase_1b_vllm": "vLLM kv_cache_dtype auto vs fp8 for production KV quant",
         },
     }
 
-    if run_lmdeploy:
-        payload["lmdeploy_kv_benchmark"] = run_lmdeploy_kv_benchmark(
-            model_id,
-            prompt,
-            session_len=max(seq_lengths) * 2,
-            max_new_tokens=32,
-        )
+    if run_vllm:
+        payload["vllm_kv_benchmark"] = run_vllm_kv_benchmark(model_id, prompt, token=token)
 
     return payload
+
+
+def merge_vllm_into_phase1b_results(
+    existing: dict[str, Any],
+    vllm_result: dict[str, Any],
+) -> dict[str, Any]:
+    """Merge vLLM benchmark into an existing phase1b_kv.json payload."""
+    merged = dict(existing)
+    merged["vllm_kv_benchmark"] = vllm_result
+    notes = dict(merged.get("notes", {}))
+    notes["phase_1b_vllm"] = "vLLM kv_cache_dtype auto vs fp8 for production KV quant"
+    merged["notes"] = notes
+    return merged
+
+
+def load_phase1b_results(path: Path) -> dict[str, Any]:
+    if path.is_file():
+        return json.loads(path.read_text(encoding="utf-8"))
+    return {}
 
 
 def save_phase1b_results(results: dict[str, Any], out_path: Path) -> None:
