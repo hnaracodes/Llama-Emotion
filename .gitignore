@@ -9,3 +9,4 @@ data/artifacts/
 .env
 .modal/
 implementation_plan.md
+.cursor/agents/

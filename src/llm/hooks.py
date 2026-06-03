@@ -50,6 +50,7 @@ def make_hidden_state_hook(
             return output
         device = hidden.device
         mod = gate(aff.to(device))
+        mod = mod.to(dtype=hidden.dtype)
         if mod.dim() == 1:
             mod = mod.unsqueeze(0).unsqueeze(0)
         elif mod.dim() == 2:

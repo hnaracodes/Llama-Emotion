@@ -104,9 +104,10 @@ def sequence_affective_vectors(
             start = max(0, t - window + 1)
             chunk = spikes[start : t + 1]
             if chunk.shape[0] < 2:
-                chunk = torch.cat(
-                    [torch.zeros(1, spikes.shape[1]), chunk], dim=0
+                pad = torch.zeros(
+                    1, spikes.shape[1], device=chunk.device, dtype=chunk.dtype
                 )
+                chunk = torch.cat([pad, chunk], dim=0)
             aff, _ = model(chunk)
-            out[t] = aff.numpy()
+            out[t] = aff.detach().cpu().numpy()
     return out

@@ -36,6 +36,10 @@ modal run train_snn.py --stub
 
 # Phase 4: hybrid modulated inference
 modal run run_hybrid.py
+
+# Emotional CLI chat (local CUDA or Modal)
+.venv\Scripts\python.exe chat.py --modal
+.venv\Scripts\python.exe chat.py --local
 ```
 
 ## Quantization (important)

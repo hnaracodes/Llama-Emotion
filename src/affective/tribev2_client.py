@@ -25,6 +25,54 @@ def synthetic_fmri_timeseries(
     return (base + noise).astype(np.float32)
 
 
+def run_tribev2_from_transcript(
+    messages: list,
+    *,
+    cache_folder: str = "./cache",
+    temp_dir: str | None = None,
+) -> Tuple[np.ndarray, str]:
+    """
+    Run TRIBEv2 on a chat transcript (list of ChatMessage or role/content dicts).
+
+    Writes a temporary timeline text file and calls run_tribev2_predict(text_path=...).
+    """
+    import tempfile
+    from pathlib import Path
+
+    from src.chat.transcript import format_tribev2_transcript
+
+    if messages and hasattr(messages[0], "role"):
+        t0 = messages[0].timestamp if hasattr(messages[0], "timestamp") else None
+        text = format_tribev2_transcript(messages, session_start=t0)  # type: ignore[arg-type]
+    else:
+        # dict fallback
+        from src.chat.session import ChatMessage
+        import time
+
+        now = time.time()
+        cms = [
+            ChatMessage(role=m["role"], content=m["content"], timestamp=now + i)
+            for i, m in enumerate(messages)
+        ]
+        text = format_tribev2_transcript(cms)
+
+    if temp_dir:
+        path = Path(temp_dir) / "chat_transcript.txt"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        return run_tribev2_predict(text_path=str(path), cache_folder=cache_folder)
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".txt", delete=False, encoding="utf-8"
+    ) as f:
+        f.write(text)
+        temp_path = f.name
+    try:
+        return run_tribev2_predict(text_path=temp_path, cache_folder=cache_folder)
+    finally:
+        Path(temp_path).unlink(missing_ok=True)
+
+
 def run_tribev2_predict(
     *,
     video_path: Optional[str] = None,

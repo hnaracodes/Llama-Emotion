@@ -40,16 +40,23 @@ image = (
     .env(_hf_env)
 )
 
+_vllm_env = {
+    **_hf_env,
+    # Legacy engine required for kv_cache_dtype=fp8 on vLLM <0.11 (L4/Modal image).
+    "VLLM_USE_V1": "0",
+}
+
 # Phase 1b vLLM serving (Python 3.12, separate heavy image)
 vllm_image = (
     modal.Image.debian_slim(python_version="3.12")
     .pip_install(
         "vllm>=0.8.0,<0.11",
+        "transformers>=4.45.0,<5.0.0",
         "huggingface-hub>=0.24.0",
         "sentencepiece>=0.2.0",
         "protobuf>=4.25.0",
     )
-    .env(_hf_env)
+    .env(_vllm_env)
 )
 
 # TRIBEv2 needs extra deps; use a separate image for affective pipeline

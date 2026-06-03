@@ -179,6 +179,20 @@ def run_hf_kv_cache_benchmark(
     return results
 
 
+def _patch_transformers_for_vllm() -> None:
+    """Restore tokenizer API removed in Transformers 5.x (needed by vLLM <0.11)."""
+    try:
+        import transformers
+        from transformers.tokenization_utils_base import PreTrainedTokenizerBase
+
+        if not hasattr(PreTrainedTokenizerBase, "all_special_tokens_extended"):
+            PreTrainedTokenizerBase.all_special_tokens_extended = property(
+                lambda self: self.all_special_tokens
+            )
+    except Exception:
+        pass  # best-effort; pinned deps in vllm_image should prevent the issue
+
+
 def run_vllm_kv_benchmark(
     model_id: str,
     prompt: str,
@@ -224,6 +238,7 @@ def run_vllm_kv_benchmark(
     }
 
     try:
+        _patch_transformers_for_vllm()
         from vllm import LLM, SamplingParams
     except ImportError as exc:
         results["error"] = f"vllm not installed: {exc}"

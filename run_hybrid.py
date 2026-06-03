@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 
 import modal
+import numpy as np
 import torch
 
 from src.common import app, gpu_kwargs, image, model_volume
@@ -38,19 +39,20 @@ def run_hybrid_inference(strength: float = 1.0) -> dict:
     spikes = torch.from_numpy(pipe["spikes"].astype(np.float32))
 
     amygdala = LIFAmygdala(input_dim=pipe["D"], output_dim=AFFECT_DIM)
-    aff_seq = sequence_affective_vectors(spikes, amygdala)
-    aff_high = torch.from_numpy(aff_seq[-1]) * 2.0
-    aff_low = torch.zeros(AFFECT_DIM)
-
     model, tokenizer = load_quantized_llama()
+    device = next(model.parameters()).device
     hidden_size = model.config.hidden_size
-    gate = AffectiveGate(AFFECT_DIM, hidden_size, mode="additive")
-    state = AffectiveState(AFFECT_DIM, device=str(next(model.parameters()).device))
+    gate = AffectiveGate(AFFECT_DIM, hidden_size, mode="additive").to(device)
+    amygdala = amygdala.to(device)
+    aff_seq = sequence_affective_vectors(spikes.to(device), amygdala)
+    aff_high = torch.from_numpy(aff_seq[-1]).to(device=device, dtype=torch.float32) * 2.0
+    aff_low = torch.zeros(AFFECT_DIM, device=device)
+    state = AffectiveState(AFFECT_DIM, device=str(device))
 
     results = {"model_id": MODEL_ID, "prompt": BENCHMARK_PROMPT, "conditions": {}}
 
     for name, vec in [("neutral", aff_low), ("high_affect", aff_high)]:
-        state.set(vec.to(next(model.parameters()).device))
+        state.set(vec)
         handles = register_affective_hooks(
             model, gate, state.get, strength=strength
         )
