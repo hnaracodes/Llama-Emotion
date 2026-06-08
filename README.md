@@ -37,6 +37,12 @@ modal run train_snn.py --stub
 # Phase 4: hybrid modulated inference
 modal run run_hybrid.py
 
+# Phase 4 extended: strength sweep, logit KL, multi-prompt ablation
+modal run benchmark_phase4_extended.py
+
+# Phase chat A/B: transcript-conditioned affect comparison
+modal run benchmark_phase_chat_ab.py
+
 # Emotional CLI chat (local CUDA or Modal)
 .venv\Scripts\python.exe chat.py --modal
 .venv\Scripts\python.exe chat.py --local

@@ -121,6 +121,44 @@ modal run run_hybrid.py --strength 1.0
 
 **Artifact:** `/artifacts/benchmarks/phase4_hybrid.json`
 
+## Phase 4 extended — Strength sweep, logit KL, multi-prompt ablation
+
+```bash
+modal run benchmark_phase4_extended.py
+modal run benchmark_phase4_extended.py --strengths 0,1,2,4
+modal run benchmark_phase4_extended.py --skip-strength-sweep
+```
+
+| Metric | Description |
+|--------|-------------|
+| `strength_sweep[]` | Same prompt at `strength ∈ PHASE4_STRENGTH_SWEEP` with high affect vector |
+| `strength_sweep[].logit_kl_*` | KL divergence at last prompt token (neutral vs high vector) |
+| `prompt_ablation[]` | Per-prompt neutral vs high_affect vs hooks-off ablation |
+| `neutral_vs_high_affect` | `text_changed`, lexical empathy/sentiment deltas, embedding cosine distance |
+| `hooks_effect` | high vector with hooks on vs hooks off |
+| `summary.fraction_text_changed` | Share of prompts where neutral ≠ high_affect text |
+
+**Artifact:** `/artifacts/benchmarks/phase4_extended.json`
+
+**Code:** `src/benchmark/affect_metrics.py`, `src/benchmark/hybrid_runner.py`
+
+## Phase chat A/B — Transcript-conditioned affect
+
+```bash
+modal run benchmark_phase_chat_ab.py
+```
+
+| Metric | Description |
+|--------|-------------|
+| `scenarios.*.traits` | Affect traits from distress / neutral / hopeful transcripts |
+| `scenarios.*.generation` | Reply to fixed user question under scenario affect |
+| `comparisons_vs_neutral` | Lexical + embedding deltas vs neutral transcript baseline |
+| `distress_vs_hopeful` | Mood-arc comparison (same opening, different closing turn) |
+
+**Artifact:** `/artifacts/benchmarks/phase_chat_ab.json`
+
+**Config:** `CHAT_AB_TRANSCRIPTS`, `CHAT_AB_USER_QUESTION` in `src/config.py`
+
 ## Phase 5 — STDP
 
 Run `train_snn.py --stdp-steps N` and inspect `stdp_log[].delta_norm` in `train_snn.json`.
@@ -132,6 +170,8 @@ Run `train_snn.py --stdp-steps N` and inspect `stdp_log[].delta_norm` in `train_
 | 1a | Yes | Yes | — |
 | 1b | KV analytic + HF + vLLM | vLLM latency | — |
 | 4 | Yes (W4) | Yes | neutral vs high_affect |
+| 4 ext | Yes (W4) | Yes | strength sweep, logit KL, multi-prompt, hooks off |
+| chat A/B | Yes (W4) | Yes | transcript scenarios vs neutral |
 | 3/5 | — | SNN latency | firing rate stats |
 
 ## Local unit tests (no GPU)
