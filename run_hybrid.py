@@ -44,7 +44,7 @@ def run_hybrid_inference(strength: float = 1.0) -> dict:
     hidden_size = model.config.hidden_size
     gate = AffectiveGate(AFFECT_DIM, hidden_size, mode="additive").to(device)
     amygdala = amygdala.to(device)
-    aff_seq = sequence_affective_vectors(spikes.to(device), amygdala)
+    aff_seq, _, _ = sequence_affective_vectors(spikes.to(device), amygdala)
     aff_high = torch.from_numpy(aff_seq[-1]).to(device=device, dtype=torch.float32) * 2.0
     aff_low = torch.zeros(AFFECT_DIM, device=device)
     state = AffectiveState(AFFECT_DIM, device=str(device))

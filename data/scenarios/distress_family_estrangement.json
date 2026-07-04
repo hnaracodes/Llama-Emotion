@@ -1,0 +1,46 @@
+{
+  "id": "distress_family_estrangement",
+  "category": "distress_recovery",
+  "emotion": "sad",
+  "tags": [
+    "distress",
+    "recovery"
+  ],
+  "eval_question": "What should I do next?",
+  "messages": [
+    {
+      "role": "user",
+      "content": "My dad and I haven't spoken in six months."
+    },
+    {
+      "role": "assistant",
+      "content": "Family distance can ache quietly."
+    },
+    {
+      "role": "user",
+      "content": "Holidays make it worse."
+    },
+    {
+      "role": "assistant",
+      "content": "Traditions highlight who's missing."
+    },
+    {
+      "role": "user",
+      "content": "I wrote him a letter I may not send."
+    },
+    {
+      "role": "assistant",
+      "content": "Putting feelings on paper can clarify them."
+    },
+    {
+      "role": "user",
+      "content": "He texted 'thinking of you' today."
+    },
+    {
+      "role": "user",
+      "content": "I don't know what happens next, but I'm less frozen."
+    }
+  ],
+  "holdout": true,
+  "source": "synthetic_template_v1"
+}

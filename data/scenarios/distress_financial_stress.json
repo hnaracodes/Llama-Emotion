@@ -1,0 +1,46 @@
+{
+  "id": "distress_financial_stress",
+  "category": "distress_recovery",
+  "emotion": "anxious",
+  "tags": [
+    "distress",
+    "recovery"
+  ],
+  "eval_question": "What should I do next?",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Rent is due and my account is overdrawn."
+    },
+    {
+      "role": "assistant",
+      "content": "Money stress can feel all-consuming."
+    },
+    {
+      "role": "user",
+      "content": "I haven't told my roommate yet."
+    },
+    {
+      "role": "assistant",
+      "content": "Shame often delays hard conversations."
+    },
+    {
+      "role": "user",
+      "content": "I picked up a weekend shift."
+    },
+    {
+      "role": "assistant",
+      "content": "Extra income is a practical response."
+    },
+    {
+      "role": "user",
+      "content": "I'll still be tight, but not evicted."
+    },
+    {
+      "role": "user",
+      "content": "I'm ashamed, but a little relieved."
+    }
+  ],
+  "holdout": true,
+  "source": "synthetic_template_v1"
+}

@@ -1,0 +1,33 @@
+{
+  "id": "factual_transit_directions",
+  "category": "factual_neutral",
+  "emotion": "neutral",
+  "tags": [
+    "factual"
+  ],
+  "eval_question": "What should I do next?",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What's the fastest way to get to Union Station?"
+    },
+    {
+      "role": "assistant",
+      "content": "Which neighborhood are you leaving from?"
+    },
+    {
+      "role": "user",
+      "content": "Near 14th and U."
+    },
+    {
+      "role": "assistant",
+      "content": "Red line south, one transfer."
+    },
+    {
+      "role": "user",
+      "content": "Got it, thanks."
+    }
+  ],
+  "holdout": true,
+  "source": "synthetic_template_v1"
+}

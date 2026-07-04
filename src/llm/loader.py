@@ -107,9 +107,12 @@ def generate_text(
     *,
     max_new_tokens: int = 128,
     temperature: float = 0.7,
+    repetition_penalty: float | None = None,
 ) -> Tuple[str, dict[str, Any]]:
     """Run a single generation pass and return text + timing stats."""
     import time
+
+    from src.config import DEFAULT_REPETITION_PENALTY
 
     inputs = tokenizer(prompt, return_tensors="pt")
     device = next(model.parameters()).device
@@ -119,24 +122,37 @@ def generate_text(
         torch.cuda.reset_peak_memory_stats()
         torch.cuda.synchronize()
 
+    gen_kwargs: dict[str, Any] = {
+        "max_new_tokens": max_new_tokens,
+        "do_sample": temperature > 0,
+        "pad_token_id": tokenizer.pad_token_id,
+    }
+    if temperature > 0:
+        gen_kwargs["temperature"] = temperature
+    rp = DEFAULT_REPETITION_PENALTY if repetition_penalty is None else repetition_penalty
+    if rp > 1.0:
+        gen_kwargs["repetition_penalty"] = rp
+
     t0 = time.perf_counter()
-    out = model.generate(
-        **inputs,
-        max_new_tokens=max_new_tokens,
-        do_sample=temperature > 0,
-        temperature=temperature if temperature > 0 else None,
-        pad_token_id=tokenizer.pad_token_id,
-    )
+    out = model.generate(**inputs, **gen_kwargs)
     if torch.cuda.is_available():
         torch.cuda.synchronize()
     elapsed = time.perf_counter() - t0
 
-    new_tokens = out.shape[1] - inputs["input_ids"].shape[1]
+    prompt_len = inputs["input_ids"].shape[1]
+    new_tokens = out.shape[1] - prompt_len
     text = tokenizer.decode(out[0], skip_special_tokens=True)
+    # `text` decodes the *full* sequence (prompt + generation), since that's
+    # what `out[0]` contains. Callers that care about what the model actually
+    # produced (e.g. collapse detection) must not run on `text` directly —
+    # it will include benchmark-authored prompt/history content verbatim.
+    # Decode only the newly generated tokens separately for that purpose.
+    new_text = tokenizer.decode(out[0][prompt_len:], skip_special_tokens=True)
 
     stats = {
         "elapsed_sec": elapsed,
         "new_tokens": new_tokens,
+        "new_text": new_text,
         "tokens_per_sec": new_tokens / elapsed if elapsed > 0 else 0.0,
         "peak_vram_bytes": (
             torch.cuda.max_memory_allocated() if torch.cuda.is_available() else 0

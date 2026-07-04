@@ -13,7 +13,7 @@ from pathlib import Path
 
 import modal
 
-from src.common import app, gpu_kwargs, image, model_volume
+from src.common import affective_image, app, gpu_kwargs, model_volume
 from src.config import (
     ARTIFACTS_MOUNT,
     BENCHMARK_MAX_NEW_TOKENS,
@@ -23,12 +23,13 @@ from src.config import (
 )
 
 
-@app.function(image=image, **gpu_kwargs())
+@app.function(image=affective_image, **gpu_kwargs())
 def benchmark_phase4_extended(
     strengths: str | None = None,
     skip_strength_sweep: bool = False,
 ) -> dict:
     from src.benchmark.affect_metrics import compare_generations
+    from src.benchmark.phenotype import build_phenotype
     from src.benchmark.hybrid_runner import (
         build_affect_vectors,
         generate_with_affect,
@@ -43,7 +44,7 @@ def benchmark_phase4_extended(
 
     model, tokenizer = load_quantized_llama()
     device = next(model.parameters()).device
-    gate = make_gate(model)
+    gate, _ = make_gate(model)
     vectors = build_affect_vectors(device)
 
     results: dict = {
@@ -80,6 +81,7 @@ def benchmark_phase4_extended(
                     vec_b=vectors["aff_high"],
                     gate=gate,
                     strength=strength,
+                    hooks_off_a=True,
                 )
             entry = {
                 "strength": strength,
@@ -108,11 +110,12 @@ def benchmark_phase4_extended(
             model,
             tokenizer,
             prompt,
-            affect_vector=vectors["aff_low"],
+            affect_vector=vectors["aff_high"],
             gate=gate,
             strength=ablation_strength,
             max_new_tokens=BENCHMARK_MAX_NEW_TOKENS,
             temperature=0.0,
+            hooks_enabled=False,
         )
         high_text, high_stats = generate_with_affect(
             model,
@@ -144,6 +147,7 @@ def benchmark_phase4_extended(
             vec_b=vectors["aff_high"],
             gate=gate,
             strength=ablation_strength,
+            hooks_off_a=True,
         )
         cmp = compare_generations(
             neutral_text, high_text, model=model, tokenizer=tokenizer
@@ -157,10 +161,12 @@ def benchmark_phase4_extended(
                 "prompt": prompt,
                 "conditions": {
                     "neutral": {
+                        "generated_text": neutral_text,
                         "generated_preview": neutral_text[-400:],
                         **neutral_stats,
                     },
                     "high_affect": {
+                        "generated_text": high_text,
                         "generated_preview": high_text[-400:],
                         **high_stats,
                     },
@@ -178,6 +184,7 @@ def benchmark_phase4_extended(
         )
 
     results["prompt_ablation"] = ablation_rows
+    results["phenotype"] = build_phenotype(ablation_rows)
     results["summary"] = {
         "prompts_total": len(PHASE4_ABLATION_PROMPTS),
         "prompts_text_changed_neutral_vs_high": prompts_changed,

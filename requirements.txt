@@ -9,6 +9,9 @@ scipy>=1.11.0
 huggingface-hub>=0.24.0
 sentencepiece>=0.2.0
 protobuf>=4.25.0
+sentence-transformers>=3.0.0
+fastapi>=0.115.0
+uvicorn>=0.30.0
 
 # Phase 2: TRIBEv2 (install from git in Modal image if needed)
 # tribev2: pip install git+https://github.com/facebookresearch/tribev2.git

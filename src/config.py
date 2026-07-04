@@ -14,6 +14,72 @@ MODEL_ID_3B = "meta-llama/Llama-3.2-3B-Instruct"
 # Affective / neuromorphic
 TRIBE_ID = "facebook/tribev2"
 AFFECT_DIM = 32
+
+# v1 supervision (§1 — post-TRIBEv2)
+SUPERVISION_VERSION = "empatheticdialogues_v1"
+EMPATHETICDIALOGUES_DIR = DATA_DIR / "raw" / "empatheticdialogues"
+SCENARIO_HOLDOUT_DIR = DATA_DIR / "scenarios"
+AFFECT_ENCODER_CKPT_NAME = "encoder.pt"
+AFFECT_ENCODER_DIR = ARTIFACTS_DIR / "affect"
+EMOTION_LEXICON_JSON = "emotion_lexicon.json"
+AFFECT_ENCODER_TRAIN_LR = 1e-3
+AFFECT_ENCODER_TRAIN_EPOCHS = 3
+AFFECT_ENCODER_BATCH_SIZE = 64
+AFFECT_ENCODER_BACKEND = "hybrid"  # hybrid (MiniLM+head) | hash (offline CI)
+MINILM_MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
+EMOTION_LEXICON_PATH = DATA_DIR / "lexicon" / "emotion_lexicon.json"
+AFFECT_ENCODER_CONTRASTIVE_WEIGHT = 0.25
+AMYGDALA_CKPT_NAME = "amygdala.pt"
+GATE_CKPT_NAME = "affect_gate.pt"
+SNN_CKPT_DIR = ARTIFACTS_DIR / "snn"
+GATE_CKPT_DIR = ARTIFACTS_DIR / "gate"
+GATE_TRAIN_MAX_SAMPLES = 500
+GATE_TRAIN_EPOCHS = 3
+GATE_GPU_TIMEOUT_SEC = 7200
+GATE_NOOP_EPS = 1e-3
+GATE_CONTRASTIVE_MARGIN = 0.5
+GATE_REPETITION_WEIGHT = 0.25
+GATE_MAX_AFFECT_NORM = 1.0
+GATE_HOLDOUT_EVAL_EVERY = 50
+GATE_COLLAPSE_MAX_RUN = 8
+DEFAULT_REPETITION_PENALTY = 1.12
+# Gate v3 — listener CE + balanced batches
+# v3.1 bumps the tag after the checkpoint-selection/loss-leak/frozen-Llama
+# hardening pass so checkpoints trained before/after that fix are distinguishable.
+GATE_VERSION = "v3.1_listener_ce_hardened"
+GATE_V3_LISTENER_MAX_TOKENS = 128
+GATE_NEUTRAL_BATCH_RATIO = 0.5
+GATE_DISTRESS_MARGIN = 0.1
+GATE_NEUTRAL_CE_EPS = 0.05
+GATE_HOLDOUT_EVERY = 50
+GATE_HOLDOUT_MAX_NEW_TOKENS = 96
+GATE_EMPATHY_ID_WEIGHT = 0.0
+GATE_DISTRESS_EMOTIONS = frozenset(
+    {"anxious", "sad", "afraid", "terrified", "devastated", "distress"}
+)
+GATE_NEUTRAL_EMOTIONS = frozenset(
+    {"neutral", "content", "prepared", "confident", "grateful", "faithful", "impressed"}
+)
+# Deliberately disjoint wording from PHASE4_ABLATION_PROMPTS: these are used only
+# to pick the best gate checkpoint *during* training. If checkpoint selection used
+# the same prompts as the Phase 4 ablation report, that report would no longer be
+# an independent check of the saved gate.
+GATE_TRAIN_HOLDOUT_PROMPTS = [
+    {
+        "id": "gate_holdout_distress",
+        "prompt": (
+            "I've been feeling really anxious about work lately and I don't "
+            "know how to cope. Can you help?"
+        ),
+    },
+    {
+        "id": "gate_holdout_neutral",
+        "prompt": "In one sentence, explain what causes ocean tides.",
+    },
+]
+AFFECT_MEMBRANE_RESET_TURNS = 32
+AFFECT_DECAY = 0.85
+AFFECT_GAIN = 0.35
 DELTA_THETA = 0.1
 SNN_HIDDEN = 64
 SNN_BETA = 0.9

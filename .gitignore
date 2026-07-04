@@ -5,8 +5,15 @@ __pycache__/
 venv/
 cache/
 data/artifacts/
+data/raw/
 *.pt
 .env
 .modal/
 implementation_plan.md
 .cursor/agents/
+*.log
+*.pid
+behavioral_verify*
+chat_ab_rerun*
+gate_v31_*
+modal_retrain.pid

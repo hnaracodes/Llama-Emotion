@@ -1,0 +1,34 @@
+{
+  "id": "factual_recipe_question",
+  "category": "factual_neutral",
+  "emotion": "neutral",
+  "tags": [
+    "factual",
+    "hooks_off_ab"
+  ],
+  "eval_question": "What should I do next?",
+  "messages": [
+    {
+      "role": "user",
+      "content": "How do I substitute yogurt in a muffin recipe?"
+    },
+    {
+      "role": "assistant",
+      "content": "Applesauce or buttermilk often works."
+    },
+    {
+      "role": "user",
+      "content": "Same amount as the yogurt?"
+    },
+    {
+      "role": "assistant",
+      "content": "Usually one-to-one by volume."
+    },
+    {
+      "role": "user",
+      "content": "Thanks, baking tonight."
+    }
+  ],
+  "holdout": true,
+  "source": "synthetic_template_v1"
+}

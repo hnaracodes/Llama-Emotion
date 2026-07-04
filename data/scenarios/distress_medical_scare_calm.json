@@ -1,0 +1,46 @@
+{
+  "id": "distress_medical_scare_calm",
+  "category": "distress_recovery",
+  "emotion": "afraid",
+  "tags": [
+    "distress",
+    "recovery"
+  ],
+  "eval_question": "What should I do next?",
+  "messages": [
+    {
+      "role": "user",
+      "content": "The doctor found something on my scan."
+    },
+    {
+      "role": "assistant",
+      "content": "Waiting for answers is agonizing."
+    },
+    {
+      "role": "user",
+      "content": "I have been googling symptoms all night."
+    },
+    {
+      "role": "assistant",
+      "content": "Anxiety often fills the gaps with worst cases."
+    },
+    {
+      "role": "user",
+      "content": "My follow-up is tomorrow morning."
+    },
+    {
+      "role": "assistant",
+      "content": "One step at a time until you hear more."
+    },
+    {
+      "role": "user",
+      "content": "They said it might be benign."
+    },
+    {
+      "role": "user",
+      "content": "I'm not celebrating yet, but I slept two hours."
+    }
+  ],
+  "holdout": true,
+  "source": "synthetic_template_v1"
+}

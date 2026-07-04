@@ -1,0 +1,51 @@
+{
+  "id": "distress_panic_easing",
+  "category": "distress_recovery",
+  "emotion": "terrified",
+  "tags": [
+    "distress",
+    "recovery",
+    "sudden_tone_shift"
+  ],
+  "eval_question": "What should I do next?",
+  "messages": [
+    {
+      "role": "user",
+      "content": "I had a panic attack before my presentation."
+    },
+    {
+      "role": "assistant",
+      "content": "That sounds frightening."
+    },
+    {
+      "role": "user",
+      "content": "My chest was tight and I thought I would pass out."
+    },
+    {
+      "role": "assistant",
+      "content": "Those physical symptoms are real and intense."
+    },
+    {
+      "role": "user",
+      "content": "I breathed slowly like my therapist taught me."
+    },
+    {
+      "role": "assistant",
+      "content": "Grounding skills can reduce the peak."
+    },
+    {
+      "role": "user",
+      "content": "I still gave the talk, shaky but finished."
+    },
+    {
+      "role": "assistant",
+      "content": "Finishing despite fear is meaningful."
+    },
+    {
+      "role": "user",
+      "content": "I'm exhausted but proud I didn't cancel."
+    }
+  ],
+  "holdout": true,
+  "source": "synthetic_template_v1"
+}

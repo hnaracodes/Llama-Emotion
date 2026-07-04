@@ -1,0 +1,37 @@
+{
+  "id": "tone_calm_to_panic",
+  "category": "tone_shift",
+  "emotion": "terrified",
+  "tags": [
+    "sudden_tone_shift"
+  ],
+  "eval_question": "What should I do next?",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Just a normal day, catching up on email."
+    },
+    {
+      "role": "assistant",
+      "content": "Steady days are underrated."
+    },
+    {
+      "role": "user",
+      "content": "Wait \u2014 I think I replied-all to the entire company."
+    },
+    {
+      "role": "assistant",
+      "content": "That jolt of dread is real."
+    },
+    {
+      "role": "user",
+      "content": "It included a draft rant about my boss."
+    },
+    {
+      "role": "user",
+      "content": "I feel sick. What do I do?"
+    }
+  ],
+  "holdout": true,
+  "source": "synthetic_template_v1"
+}

@@ -1,0 +1,34 @@
+{
+  "id": "factual_tech_support_reset",
+  "category": "factual_neutral",
+  "emotion": "neutral",
+  "tags": [
+    "factual",
+    "hooks_off_ab"
+  ],
+  "eval_question": "What should I do next?",
+  "messages": [
+    {
+      "role": "user",
+      "content": "My router keeps dropping Wi-Fi."
+    },
+    {
+      "role": "assistant",
+      "content": "When did it start happening?"
+    },
+    {
+      "role": "user",
+      "content": "After a firmware update yesterday."
+    },
+    {
+      "role": "assistant",
+      "content": "Try power-cycling for thirty seconds."
+    },
+    {
+      "role": "user",
+      "content": "I'll try that before a factory reset."
+    }
+  ],
+  "holdout": true,
+  "source": "synthetic_template_v1"
+}

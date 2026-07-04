@@ -1,96 +1,53 @@
 """
-Phase 3/5: SNN forward pass + optional STDP training on Modal.
+Train SNN amygdala on encoder spike outputs (M1 — §1, replaces TRIBEv2 stub path).
 
 Usage:
   modal run train_snn.py
-  modal run train_snn.py --stub
-  modal run train_snn.py --stdp-steps 50
+  modal run train_snn.py --max-samples 500 --epochs 2
+  py -3 train_snn.py --local --fixture   # offline CI only
 """
 
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
-import modal
-import numpy as np
-import torch
-
-from src.common import affective_image, app, gpu_kwargs, model_volume
-from src.config import ARTIFACTS_MOUNT, DELTA_THETA
+from src.common import app
+from src.runtime_paths import empatheticdialogues_dir, snn_ckpt_dir
+from src.train import modal_jobs as _modal_jobs  # noqa: F401
+from src.train.modal_jobs import train_snn_remote
+from src.train.snn import train_snn_loop
 
 
-@app.function(image=affective_image, **gpu_kwargs())
-def train_snn_remote(stub: bool = True, stdp_steps: int = 0) -> dict:
-    from src.affective.tribev2_client import (
-        pipeline_to_spikes,
-        run_tribev2_predict,
-        save_pipeline_artifacts,
-        synthetic_fmri_timeseries,
+@app.local_entrypoint(name="train_snn")
+def main(max_samples: int = 500, epochs: int = 2):
+    print(json.dumps(train_snn_remote.remote(max_samples=max_samples, epochs=epochs), indent=2))
+
+
+def train_local(*, fixture: bool = False, max_samples: int = 100, epochs: int = 2) -> dict:
+    from src.config import PROJECT_ROOT
+
+    data_dir = (
+        PROJECT_ROOT / "tests" / "fixtures" / "empatheticdialogues"
+        if fixture
+        else empatheticdialogues_dir()
     )
-    from src.brain.lif_network import LIFAmygdala, run_amygdala_on_spikes
-    from src.brain.stdp import STDPUpdater
-    from src.config import AFFECT_DIM
-
-    if stub:
-        fmri, source = synthetic_fmri_timeseries(), "synthetic_stub"
-    else:
-        fmri, source = run_tribev2_predict()
-
-    pipe = pipeline_to_spikes(fmri, theta=DELTA_THETA)
-    spikes = torch.from_numpy(pipe["spikes"].astype(np.float32))
-
-    model = LIFAmygdala(input_dim=pipe["D"], output_dim=AFFECT_DIM)
-    aff, stats = run_amygdala_on_spikes(spikes, model)
-
-    stdp_log = []
-    if stdp_steps > 0:
-        updater = STDPUpdater()
-        model.train()
-        for step in range(stdp_steps):
-            # Use fc1 layer; proxy post spikes from lif1 output via threshold
-            with torch.no_grad():
-                x = spikes.unsqueeze(0)
-                mem = model.lif1.init_leaky()
-                pre_spk = []
-                post_spk = []
-                for t in range(min(32, x.shape[1])):
-                    cur = model.fc1(x[:, t, :])
-                    spk, mem = model.lif1(cur, mem)
-                    pre_spk.append((x[:, t, :] > 0.5).float())
-                    post_spk.append(spk.squeeze(0))
-                pre = torch.stack(pre_spk, dim=0).squeeze(1)
-                post = torch.stack(post_spk, dim=0)
-            delta = updater.update_linear(model.fc1, pre, post)
-            stdp_log.append({"step": step, "delta_norm": float(delta.norm().item())})
-
-    out_dir = Path(ARTIFACTS_MOUNT) / "snn"
-    save_pipeline_artifacts(
-        out_dir,
-        fmri,
-        pipe,
-        {"source": source, "stub": stub, "stdp_steps": stdp_steps},
+    return train_snn_loop(
+        data_dir=data_dir,
+        out_dir=snn_ckpt_dir(),
+        max_samples=max_samples,
+        epochs=epochs,
+        backend="hash" if fixture else None,
     )
-    ckpt = out_dir / "amygdala.pt"
-    torch.save(model.state_dict(), ckpt)
-
-    result = {
-        "source": source,
-        "spike_sparsity": pipe["spike_sparsity"],
-        "affective_vector": aff.tolist(),
-        "snn_stats": stats,
-        "stdp_log": stdp_log[:10],
-        "checkpoint": str(ckpt),
-    }
-
-    meta_path = Path(ARTIFACTS_MOUNT) / "benchmarks" / "train_snn.json"
-    meta_path.parent.mkdir(parents=True, exist_ok=True)
-    meta_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
-    model_volume.commit()
-    return result
 
 
-@app.local_entrypoint()
-def main(stub: bool = True, stdp_steps: int = 0):
-    result = train_snn_remote.remote(stub=stub, stdp_steps=stdp_steps)
-    print(json.dumps(result, indent=2))
+if __name__ == "__main__":
+    import argparse
+
+    p = argparse.ArgumentParser()
+    p.add_argument("--local", action="store_true")
+    p.add_argument("--fixture", action="store_true")
+    p.add_argument("--max-samples", type=int, default=100)
+    p.add_argument("--epochs", type=int, default=2)
+    args = p.parse_args()
+    if args.local:
+        print(json.dumps(train_local(fixture=args.fixture, max_samples=args.max_samples, epochs=args.epochs), indent=2))

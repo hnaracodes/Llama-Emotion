@@ -1,0 +1,37 @@
+{
+  "id": "conflict_friend_betrayal",
+  "category": "conflict",
+  "emotion": "betrayed",
+  "tags": [
+    "conflict"
+  ],
+  "eval_question": "What should I do next?",
+  "messages": [
+    {
+      "role": "user",
+      "content": "My friend shared something private I told them."
+    },
+    {
+      "role": "assistant",
+      "content": "Broken trust cuts deep."
+    },
+    {
+      "role": "user",
+      "content": "They said it was an accident."
+    },
+    {
+      "role": "assistant",
+      "content": "Intent doesn't always heal the breach."
+    },
+    {
+      "role": "user",
+      "content": "Mutual friends are taking sides."
+    },
+    {
+      "role": "user",
+      "content": "I don't know if I want to repair this."
+    }
+  ],
+  "holdout": true,
+  "source": "synthetic_template_v1"
+}

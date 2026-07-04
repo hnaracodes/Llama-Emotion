@@ -1,0 +1,2 @@
+conv_id,utterance_idx,context,prompt,speaker_idx,utterance,selfeval
+3,0,hopeful,I failed my exam today and I feel awful.,0,Actually I'm starting to feel a bit hopeful about retaking it.,5|5|5|5|5|5|5|5|5

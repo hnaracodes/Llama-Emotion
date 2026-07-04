@@ -1,0 +1,33 @@
+{
+  "id": "factual_weather_smalltalk",
+  "category": "factual_neutral",
+  "emotion": "neutral",
+  "tags": [
+    "factual"
+  ],
+  "eval_question": "What should I do next?",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Is it going to rain this afternoon?"
+    },
+    {
+      "role": "assistant",
+      "content": "I don't have live weather data."
+    },
+    {
+      "role": "user",
+      "content": "Fair \u2014 I'll check an app."
+    },
+    {
+      "role": "assistant",
+      "content": "A radar map is best for timing."
+    },
+    {
+      "role": "user",
+      "content": "Thanks anyway."
+    }
+  ],
+  "holdout": true,
+  "source": "synthetic_template_v1"
+}

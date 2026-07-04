@@ -1,0 +1,37 @@
+{
+  "id": "conflict_customer_service_anger",
+  "category": "conflict",
+  "emotion": "furious",
+  "tags": [
+    "conflict"
+  ],
+  "eval_question": "What should I do next?",
+  "messages": [
+    {
+      "role": "user",
+      "content": "I've been on hold for forty minutes."
+    },
+    {
+      "role": "assistant",
+      "content": "That would test anyone's patience."
+    },
+    {
+      "role": "user",
+      "content": "The agent hung up on me."
+    },
+    {
+      "role": "assistant",
+      "content": "Being disconnected mid-issue is maddening."
+    },
+    {
+      "role": "user",
+      "content": "I yelled at the next rep even though it wasn't their fault."
+    },
+    {
+      "role": "user",
+      "content": "I still don't have a refund."
+    }
+  ],
+  "holdout": true,
+  "source": "synthetic_template_v1"
+}

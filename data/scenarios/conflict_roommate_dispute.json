@@ -1,0 +1,37 @@
+{
+  "id": "conflict_roommate_dispute",
+  "category": "conflict",
+  "emotion": "annoyed",
+  "tags": [
+    "conflict"
+  ],
+  "eval_question": "What should I do next?",
+  "messages": [
+    {
+      "role": "user",
+      "content": "My roommate never cleans the kitchen."
+    },
+    {
+      "role": "assistant",
+      "content": "Repeated messes build resentment."
+    },
+    {
+      "role": "user",
+      "content": "I left a note and they ignored it."
+    },
+    {
+      "role": "assistant",
+      "content": "Passive notes sometimes fail to land."
+    },
+    {
+      "role": "user",
+      "content": "I snapped and sent an angry text."
+    },
+    {
+      "role": "user",
+      "content": "Now they're acting like I'm the problem."
+    }
+  ],
+  "holdout": true,
+  "source": "synthetic_template_v1"
+}

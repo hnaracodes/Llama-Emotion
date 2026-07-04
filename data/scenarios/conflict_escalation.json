@@ -1,0 +1,38 @@
+{
+  "id": "conflict_escalation",
+  "category": "conflict",
+  "emotion": "angry",
+  "tags": [
+    "conflict",
+    "escalation"
+  ],
+  "eval_question": "What should I do next?",
+  "messages": [
+    {
+      "role": "user",
+      "content": "My coworker took credit for my work again."
+    },
+    {
+      "role": "assistant",
+      "content": "That must feel unfair."
+    },
+    {
+      "role": "user",
+      "content": "I'm furious and don't know what to say."
+    },
+    {
+      "role": "assistant",
+      "content": "Anger is a signal something crossed a line."
+    },
+    {
+      "role": "user",
+      "content": "I want to confront them in the meeting tomorrow."
+    },
+    {
+      "role": "user",
+      "content": "Part of me wants to burn the bridge entirely."
+    }
+  ],
+  "holdout": true,
+  "source": "synthetic_template_v1"
+}

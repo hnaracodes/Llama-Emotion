@@ -1,0 +1,37 @@
+{
+  "id": "tone_joking_then_serious",
+  "category": "tone_shift",
+  "emotion": "anxious",
+  "tags": [
+    "sudden_tone_shift"
+  ],
+  "eval_question": "What should I do next?",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Ha, I guess I'll just live in this mess forever."
+    },
+    {
+      "role": "assistant",
+      "content": "Self-deprecating humor sometimes masks stress."
+    },
+    {
+      "role": "user",
+      "content": "No, I'm not joking this time."
+    },
+    {
+      "role": "assistant",
+      "content": "I'm listening."
+    },
+    {
+      "role": "user",
+      "content": "The clutter is because I can't get out of bed most days."
+    },
+    {
+      "role": "user",
+      "content": "I'm scared it's getting worse."
+    }
+  ],
+  "holdout": true,
+  "source": "synthetic_template_v1"
+}

@@ -1,0 +1,34 @@
+{
+  "id": "factual_week_planning",
+  "category": "factual_neutral",
+  "emotion": "neutral",
+  "tags": [
+    "factual",
+    "hooks_off_ab"
+  ],
+  "eval_question": "What should I do next?",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Hi, I'm planning my week."
+    },
+    {
+      "role": "assistant",
+      "content": "Sure \u2014 what are your priorities?"
+    },
+    {
+      "role": "user",
+      "content": "Mostly work tasks and a gym session."
+    },
+    {
+      "role": "assistant",
+      "content": "Do you want help ordering them?"
+    },
+    {
+      "role": "user",
+      "content": "Yes, deadlines are Wednesday and Friday."
+    }
+  ],
+  "holdout": true,
+  "source": "synthetic_template_v1"
+}

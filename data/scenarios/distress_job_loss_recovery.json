@@ -1,0 +1,50 @@
+{
+  "id": "distress_job_loss_recovery",
+  "category": "distress_recovery",
+  "emotion": "devastated",
+  "tags": [
+    "distress",
+    "recovery"
+  ],
+  "eval_question": "What should I do next?",
+  "messages": [
+    {
+      "role": "user",
+      "content": "I got laid off today with no warning."
+    },
+    {
+      "role": "assistant",
+      "content": "That is a lot to absorb at once."
+    },
+    {
+      "role": "user",
+      "content": "I keep replaying the meeting in my head."
+    },
+    {
+      "role": "assistant",
+      "content": "Shock often comes before planning."
+    },
+    {
+      "role": "user",
+      "content": "My partner says we'll manage, but I feel useless."
+    },
+    {
+      "role": "assistant",
+      "content": "Feeling useless after a layoff is common."
+    },
+    {
+      "role": "user",
+      "content": "I updated my resume tonight anyway."
+    },
+    {
+      "role": "assistant",
+      "content": "That is a concrete step forward."
+    },
+    {
+      "role": "user",
+      "content": "I'm still scared, but slightly less panicked."
+    }
+  ],
+  "holdout": true,
+  "source": "synthetic_template_v1"
+}

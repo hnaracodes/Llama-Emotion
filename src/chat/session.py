@@ -30,12 +30,24 @@ class ChatSession:
     last_user_ts: float = field(default_factory=time.time)
     tone_timeline: list[dict[str, Any]] = field(default_factory=list)
     hook_strength: float = 1.0
-    manual_affect_scale: float | None = None  # /affect high|low override
+    manual_affect_scale: float | None = None
+    affect_dynamics: Any | None = None
+    snn_mem_state: Any | None = None
+    turn_index: int = 0
+    affect_trajectory: list[list[float]] = field(default_factory=list)
 
     def append(self, role: Role, content: str) -> None:
         self.messages.append(ChatMessage(role=role, content=content))
         if role == "user":
             self.last_user_ts = time.time()
+            self.turn_index += 1
+
+    def reset_affect_state(self) -> None:
+        self.affect_vector = None
+        self.snn_mem_state = None
+        self.affect_dynamics = None
+        self.turn_index = 0
+        self.affect_trajectory.clear()
 
     def transcript_messages(self) -> list[ChatMessage]:
         return [m for m in self.messages if m.role in ("user", "assistant")]

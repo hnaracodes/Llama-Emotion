@@ -1,0 +1,37 @@
+{
+  "id": "tone_sarcasm_to_sincere",
+  "category": "tone_shift",
+  "emotion": "guilty",
+  "tags": [
+    "sudden_tone_shift"
+  ],
+  "eval_question": "What should I do next?",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Oh great, another team-building exercise."
+    },
+    {
+      "role": "assistant",
+      "content": "Sounds like you're not thrilled."
+    },
+    {
+      "role": "user",
+      "content": "Sorry, that was snarky."
+    },
+    {
+      "role": "assistant",
+      "content": "No need to apologize for honesty."
+    },
+    {
+      "role": "user",
+      "content": "Honestly I'm lonely at work and hate pretending."
+    },
+    {
+      "role": "user",
+      "content": "Maybe the exercise wouldn't be awful."
+    }
+  ],
+  "holdout": true,
+  "source": "synthetic_template_v1"
+}

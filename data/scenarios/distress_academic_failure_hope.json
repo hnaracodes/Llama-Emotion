@@ -1,0 +1,46 @@
+{
+  "id": "distress_academic_failure_hope",
+  "category": "distress_recovery",
+  "emotion": "disappointed",
+  "tags": [
+    "distress",
+    "recovery"
+  ],
+  "eval_question": "What should I do next?",
+  "messages": [
+    {
+      "role": "user",
+      "content": "I failed my qualifying exam."
+    },
+    {
+      "role": "assistant",
+      "content": "That can feel like your future collapsed."
+    },
+    {
+      "role": "user",
+      "content": "My advisor was kind but I feel like a fraud."
+    },
+    {
+      "role": "assistant",
+      "content": "Setbacks don't erase your effort."
+    },
+    {
+      "role": "user",
+      "content": "I can retake it next semester."
+    },
+    {
+      "role": "assistant",
+      "content": "A second attempt is still a path forward."
+    },
+    {
+      "role": "user",
+      "content": "I started a study plan with a classmate."
+    },
+    {
+      "role": "user",
+      "content": "I'm not confident, but I'm not quitting."
+    }
+  ],
+  "holdout": true,
+  "source": "synthetic_template_v1"
+}

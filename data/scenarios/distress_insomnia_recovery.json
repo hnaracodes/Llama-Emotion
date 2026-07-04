@@ -1,0 +1,46 @@
+{
+  "id": "distress_insomnia_recovery",
+  "category": "distress_recovery",
+  "emotion": "anxious",
+  "tags": [
+    "distress",
+    "recovery"
+  ],
+  "eval_question": "What should I do next?",
+  "messages": [
+    {
+      "role": "user",
+      "content": "I haven't slept more than three hours in a week."
+    },
+    {
+      "role": "assistant",
+      "content": "Sleep debt wears on everything."
+    },
+    {
+      "role": "user",
+      "content": "Work mistakes are piling up."
+    },
+    {
+      "role": "assistant",
+      "content": "Exhaustion makes small tasks heavy."
+    },
+    {
+      "role": "user",
+      "content": "I saw my doctor about it yesterday."
+    },
+    {
+      "role": "assistant",
+      "content": "Asking for help is a strong move."
+    },
+    {
+      "role": "user",
+      "content": "Last night I got five hours."
+    },
+    {
+      "role": "user",
+      "content": "Not fixed, but the spiral feels slower."
+    }
+  ],
+  "holdout": true,
+  "source": "synthetic_template_v1"
+}

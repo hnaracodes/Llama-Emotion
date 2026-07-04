@@ -102,6 +102,7 @@ def extract_signature_from_pipeline(
     amygdala: torch.nn.Module | None = None,
     device: torch.device | str = "cpu",
     prev_vector: np.ndarray | None = None,
+    snn_mem_state: tuple | None = None,
 ) -> dict[str, Any]:
     """Run SNN on spikes and return vector + traits."""
     from src.brain.lif_network import LIFAmygdala, sequence_affective_vectors
@@ -112,8 +113,9 @@ def extract_signature_from_pipeline(
     amygdala.eval()
 
     with torch.no_grad():
-        aff_seq = sequence_affective_vectors(spikes, amygdala)
-        _, stats = amygdala(spikes if spikes.dim() == 2 else spikes.squeeze(0))
+        aff_seq, new_mem, stats = sequence_affective_vectors(
+            spikes, amygdala, mem_state=snn_mem_state
+        )
 
     vector = aff_seq[-1].astype(np.float32)
     traits = compute_traits(
@@ -126,6 +128,7 @@ def extract_signature_from_pipeline(
         "vector": vector,
         "traits": traits,
         "snn_stats": stats,
+        "snn_mem_state": new_mem,
         "source_meta": {},
     }
 

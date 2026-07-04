@@ -1,5 +1,7 @@
 """Modal app, container image, and shared volumes."""
 
+from pathlib import Path
+
 import modal
 
 from src.config import (
@@ -21,7 +23,11 @@ _hf_env = {
     "HF_HOME": MODEL_CACHE_DIR,
     "TRANSFORMERS_CACHE": MODEL_CACHE_DIR,
     "TOKENIZERS_PARALLELISM": "false",
+    "SAA_RUNTIME": "modal",
 }
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_BAKED_DATA = _PROJECT_ROOT / "data"
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
@@ -63,7 +69,18 @@ vllm_image = (
 affective_image = image.pip_install(
     "pandas>=2.0.0",
     "einops>=0.7.0",
+    "sentence-transformers>=3.0.0",
 )
+if (_BAKED_DATA / "scenarios").is_dir():
+    affective_image = affective_image.add_local_dir(
+        _BAKED_DATA / "scenarios",
+        remote_path="/opt/saa/data/scenarios",
+    )
+if (_BAKED_DATA / "lexicon").is_dir():
+    affective_image = affective_image.add_local_dir(
+        _BAKED_DATA / "lexicon",
+        remote_path="/opt/saa/data/lexicon",
+    )
 
 # Mount local package for Modal functions
 image = image.add_local_python_source("src")

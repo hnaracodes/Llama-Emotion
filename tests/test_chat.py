@@ -3,6 +3,7 @@
 import json
 import time
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 
@@ -93,3 +94,82 @@ def test_run_tribev2_from_transcript_fallback():
     fmri, source = run_tribev2_from_transcript(msgs)
     assert fmri.ndim == 2
     assert "synthetic" in source or "tribev2" in source
+
+
+def test_affect_dynamics_across_turns():
+    from src.affective.dynamics import AffectDynamics
+    from src.affective.emotion_lexicon import emotion_to_32d
+
+    dyn = AffectDynamics(decay=0.8, gain=0.35)
+    v1 = dyn.step(emotion_to_32d("anxious"))
+    v2 = dyn.step(emotion_to_32d("joyful"))
+    assert not np.allclose(v1, v2)
+    assert len(dyn.trajectory) == 2
+
+
+@patch("src.chat.engine.extract_signature_from_pipeline")
+@patch("src.chat.engine.register_affective_hooks", return_value=[])
+@patch("src.brain.checkpoints.load_gate")
+@patch("src.brain.checkpoints.load_amygdala")
+@patch("src.brain.checkpoints.load_encoder")
+def test_multi_turn_affect_vectors_differ(mock_enc, mock_amy, mock_gate, _hooks, mock_sig):
+    """Track A: consecutive refresh_affect calls evolve session affect (no GPU)."""
+    import torch
+
+    from src.brain.checkpoints import LoadResult
+    from src.brain.lif_network import LIFAmygdala
+    from src.affective.encoder import AffectEncoder
+    from src.chat.engine import ChatEngine
+    from src.config import AFFECT_DIM
+
+    def _mock_model():
+        model = MagicMock()
+        model.config.hidden_size = 2048
+        p = torch.nn.Parameter(torch.zeros(1))
+        model.parameters = lambda: iter([p])
+        return model
+
+    def _mock_tokenizer():
+        tok = MagicMock()
+        tok.pad_token_id = 0
+        return tok
+
+    enc = AffectEncoder(backend="hash")
+    amy = LIFAmygdala(input_dim=AFFECT_DIM, output_dim=AFFECT_DIM)
+    mock_enc.return_value = (enc, LoadResult(source="random_init"))
+    mock_amy.return_value = (amy, LoadResult(source="random_init"))
+    mock_gate.return_value = LoadResult(source="random_init")
+
+    vec_a = np.random.randn(AFFECT_DIM).astype(np.float32)
+    vec_b = np.random.randn(AFFECT_DIM).astype(np.float32)
+    mock_sig.side_effect = [
+        {"vector": vec_a, "traits": {"engagement": 0.5, "shift": 0.0}, "snn_mem_state": None},
+        {"vector": vec_b, "traits": {"engagement": 0.6, "shift": 0.1}, "snn_mem_state": ("m1", "m2")},
+    ]
+
+    engine = ChatEngine(_mock_model(), _mock_tokenizer(), encoder_backend="hash")
+    engine.session.append("user", "I failed my exam and feel devastated.")
+    engine.refresh_affect(force=True)
+    v1 = engine.session.affect_vector.copy()
+
+    engine.session.append("user", "Actually I'm starting to feel hopeful.")
+    engine.refresh_affect(force=True)
+    v2 = engine.session.affect_vector.copy()
+
+    assert v1.shape == (AFFECT_DIM,)
+    assert v2.shape == (AFFECT_DIM,)
+    assert not np.allclose(v1, v2)
+    assert engine.session.affect_dynamics is not None
+    assert len(engine.session.affect_dynamics.trajectory) == 2
+    assert engine.session.snn_mem_state == ("m1", "m2")
+
+
+def test_session_reset_affect_state_clears_membrane():
+    s = ChatSession()
+    s.snn_mem_state = ("a", "b")
+    s.turn_index = 3
+    s.affect_trajectory.append([0.0] * 32)
+    s.reset_affect_state()
+    assert s.snn_mem_state is None
+    assert s.turn_index == 0
+    assert s.affect_trajectory == []

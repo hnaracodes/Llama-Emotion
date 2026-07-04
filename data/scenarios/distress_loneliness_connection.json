@@ -1,0 +1,46 @@
+{
+  "id": "distress_loneliness_connection",
+  "category": "distress_recovery",
+  "emotion": "lonely",
+  "tags": [
+    "distress",
+    "recovery"
+  ],
+  "eval_question": "What should I do next?",
+  "messages": [
+    {
+      "role": "user",
+      "content": "I moved cities and don't know anyone here."
+    },
+    {
+      "role": "assistant",
+      "content": "New places can feel isolating at first."
+    },
+    {
+      "role": "user",
+      "content": "Weekends are the hardest."
+    },
+    {
+      "role": "assistant",
+      "content": "Empty time can amplify loneliness."
+    },
+    {
+      "role": "user",
+      "content": "I joined a climbing gym on a whim."
+    },
+    {
+      "role": "assistant",
+      "content": "Shared activities can open small connections."
+    },
+    {
+      "role": "user",
+      "content": "Someone remembered my name today."
+    },
+    {
+      "role": "user",
+      "content": "It was tiny, but it helped."
+    }
+  ],
+  "holdout": true,
+  "source": "synthetic_template_v1"
+}
