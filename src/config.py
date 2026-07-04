@@ -125,6 +125,15 @@ TONE_SHIFT_THRESHOLD = 0.15
 TONE_USE_COLOR = True
 TONE_FLASH_ON_SHIFT = True
 
+# Chat hardening (docs/chat_hardening_plan.md)
+# Safe, generic reply returned when a chat turn collapses even after the
+# hooks-off retry — never emits raw model output once collapse is confirmed.
+CHAT_COLLAPSE_FALLBACK_REPLY = (
+    "I want to make sure I respond thoughtfully here — could you say that "
+    "one more time, maybe with a bit more detail?"
+)
+CHAT_LOG_SCHEMA_VERSION = 2
+
 # Phase 4 extended — multi-prompt ablation + strength sweep
 PHASE4_STRENGTH_SWEEP = [0.0, 0.5, 1.0, 2.0, 4.0]
 PHASE4_ABLATION_PROMPTS = [

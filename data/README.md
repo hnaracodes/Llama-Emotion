@@ -39,6 +39,8 @@ User text (chat transcript)
 
 **At chat time (`ChatEngine` / `chat.py`):** each user turn refreshes affect from the live transcript, registers hooks for that generation only, decodes **new tokens only** for the reply (not the full prompt), and removes hooks afterward. Strength `/strength`, manual override `/affect`, and periodic `/refresh` are exposed in the CLI.
 
+**Runtime collapse guard (hardened 2026-07-04, `docs/chat_hardening_plan.md` Phase 1A):** every `generate_reply()` call runs the same `detect_empathy_collapse` / `collapse_score` check used in benchmarks on the freshly generated reply. If it fires and hooks were on, the engine retries once with hooks forced off; if it's still collapsed (or hooks were already off), it returns a fixed safe fallback string instead of raw looping text. `gate_health()` also verifies the loaded gate checkpoint is `trained` and matches `config.GATE_VERSION`, warning (local CLI/API) or fail-fast (Modal `EmotionalChatWorker.setup()`) otherwise.
+
 ---
 
 ## What we can claim (July 2026, Gate v3.1)
@@ -52,6 +54,7 @@ These statements are supported by Modal runs + 128 passing pytest tests after th
 | **Multi-turn chat benchmark is collapse-free** | Chat A/B (distress / neutral / hopeful): all `collapse_detected: false` with coherent replies |
 | **Scenario holdout is collapse-free** | 29 scripted scenarios: hooks-on generation passes collapse check on **generated text only** |
 | **Affect modulates output** | Chat A/B: distress/hopeful differ from neutral baseline (`text_changed`, empathy/sentiment deltas) |
+| **Interactive chat has a runtime safety net (new 2026-07-04)** | `ChatEngine.generate_reply` runs the collapse detector on every turn (not just benchmarks), retries hooks-off, and falls back to a safe reply if still collapsed; gate checkpoint provenance is checked at load time. Unit-tested (no GPU) in `tests/test_chat_engine_collapse_guard.py` |
 
 **Checkpoint tag:** `gate_version: v3.1_listener_ce_hardened` (see `train_gate.json` on Modal volume).
 
@@ -62,8 +65,7 @@ These statements are supported by Modal runs + 128 passing pytest tests after th
 | Limitation | Why |
 |------------|-----|
 | **Human-quality empathy** | Lexical/embedding metrics only; no human eval |
-| **Long-session stability** | Benchmarks use ≤64–96 new tokens; interactive chat allows up to 256 — needs soak tests |
-| **Interactive CLI is production-ready** | `chat.py` / Modal worker work but lack runtime collapse guard, session metrics, and hardened long-turn tests — see [`docs/chat_hardening_plan.md`](../docs/chat_hardening_plan.md) |
+| **Long-session stability at 256 tokens/turn** | Runtime collapse guard + per-turn metrics are implemented and unit-tested (Phases 1-2, 4-5 of `docs/chat_hardening_plan.md`); the 10-turn Modal soak benchmark (`benchmark_phase_chat_soak.py`, Phase 3) is written but **not yet executed on GPU** — no empirical 256-token multi-turn collapse-rate number yet |
 | **Teacher-forcing ↔ rollout gap** | Gate trains with gold listener tokens; inference uses model's own samples (standard exposure bias) |
 | **Independent Phase 4 on every prompt** | Gate training holdout uses **disjoint** prompts from Phase 4 ablation set by design |
 
@@ -174,6 +176,7 @@ py -3 -m modal run train_gate.py --max-samples 500 --epochs 2   # Gate v3.1
 py -3 scripts/run_behavioral_verification.py --skip-train
 py -3 -m modal run benchmark_phase_scenarios.py --max-new-tokens 64
 py -3 -m modal run benchmark_phase_chat_ab.py --max-new-tokens 64
+py -3 -m modal run benchmark_phase_chat_soak.py   # 10-turn, 256 tok/turn — not yet executed, see below
 ```
 
 **Interactive emotional chat (CLI):**
@@ -185,17 +188,20 @@ py -3 chat.py --local
 # Or Modal warm worker (no local GPU)
 py -3 chat.py --modal
 
-# In-session: /mood /colors /refresh /strength 1.0 /affect high|low|neutral /save /quit
+# In-session: /mood /colors /refresh /strength 1.0 /affect high|low|neutral /status /save /quit
 ```
 
-See [`docs/chat_hardening_plan.md`](../docs/chat_hardening_plan.md) for the roadmap to production-grade interactive chat.
+`/status` prints gate checkpoint version/health and the last turn's collapse/affect diagnostics. If a turn's reply collapses, the CLI prints a `[collapse guard]` banner and either an auto-recovered (hooks-off retry) or safe-fallback reply — never raw looping text.
+
+See [`docs/chat_hardening_plan.md`](../docs/chat_hardening_plan.md) for the full hardening plan and checklist (Phases 1, 2, 4, 5 implemented and unit-tested; Phase 3 GPU soak run still pending).
 
 **Emotion Microscope API (local HTTP introspection):**
 
 ```powershell
 py -3 -m pip install fastapi uvicorn
 py -3 run_microscope.py
-# POST http://localhost:8765/chat  {"message": "...", "session_id": "demo"}
+# POST http://localhost:8765/chat    {"message": "...", "session_id": "demo"}
+# GET  http://localhost:8765/health/demo   -> gate provenance for that session
 ```
 
 **Local (CI / fixture smoke tests):**

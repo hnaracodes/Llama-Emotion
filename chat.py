@@ -7,7 +7,7 @@ Usage (project .venv only):
   .venv\\Scripts\\python.exe chat.py --modal          # Modal warm GPU worker
 
 Commands during chat:
-  /mood /colors /refresh /strength N /affect high|low|neutral /save /quit
+  /mood /colors /refresh /strength N /affect high|low|neutral /status /save /quit
 """
 
 from __future__ import annotations
@@ -28,9 +28,11 @@ if hasattr(sys.stdout, "reconfigure"):
 from src.chat.tone_markers import (
     format_affect_line,
     format_assistant_line,
+    format_collapse_warning,
     format_colors_legend,
     format_mood_summary,
     format_shift_banner,
+    format_status,
 )
 from src.config import AFFECT_REFRESH_SEC, CHAT_ASSISTANT_LABEL, CHAT_HOOK_STRENGTH
 
@@ -59,6 +61,7 @@ def run_local_cli(args: argparse.Namespace) -> int:
     print("Loading W4 Llama (local GPU)...")
     model, tokenizer = load_quantized_llama()
     engine = ChatEngine(model, tokenizer, hook_strength=args.strength)
+    _print_gate_health_if_needed(engine.gate_health())
     return _repl(engine, modal_worker=None, args=args)
 
 
@@ -67,7 +70,13 @@ def run_modal_cli(args: argparse.Namespace) -> int:
 
     print("Connecting to Modal EmotionalChatWorker (warm GPU)...")
     worker = EmotionalChatWorker()
+    _print_gate_health_if_needed(worker.get_health.remote())
     return _repl(engine=None, modal_worker=worker, args=args)
+
+
+def _print_gate_health_if_needed(health: dict) -> None:
+    if health.get("warning"):
+        print(f"[chat] WARNING: {health['warning']}")
 
 
 def _repl(engine, modal_worker, args: argparse.Namespace) -> int:
@@ -100,6 +109,9 @@ def _repl(engine, modal_worker, args: argparse.Namespace) -> int:
             result = modal_worker.chat_turn.remote(user_text, temperature=args.temperature)
         else:
             result = engine.generate_reply(user_text, temperature=args.temperature)
+
+        if result.get("collapse_detected"):
+            print(format_collapse_warning(bool(result.get("recovered"))))
 
         tone = result.get("dominant_tone", "neutral")
         print(format_assistant_line(result["reply"], tone, label=CHAT_ASSISTANT_LABEL))
@@ -169,6 +181,17 @@ def _handle_command(cmd: str, engine, modal_worker, args) -> bool:
         else:
             engine.set_manual_affect(scale)
         print(f"Manual affect scale: {scale}")
+        return False
+
+    if name == "/status":
+        if modal_worker:
+            health = modal_worker.get_health.remote()
+            state = modal_worker.get_session_state.remote()
+            turn_metrics = state.get("turn_metrics", [])
+        else:
+            health = engine.gate_health()
+            turn_metrics = engine.session.turn_metrics
+        print(format_status(health, turn_metrics))
         return False
 
     if name == "/save":

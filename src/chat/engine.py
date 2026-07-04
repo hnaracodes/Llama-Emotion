@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 import time
 from typing import Any
 
@@ -20,6 +21,7 @@ from src.chat.tone_markers import detect_shift, dominant_tone
 from src.config import (
     AFFECT_DIM,
     AFFECT_ENCODER_BACKEND,
+    CHAT_COLLAPSE_FALLBACK_REPLY,
     CHAT_HOOK_STRENGTH,
     CHAT_KV_BITS,
     CHAT_MAX_HISTORY_TOKENS,
@@ -27,6 +29,7 @@ from src.config import (
     DEFAULT_REPETITION_PENALTY,
     DELTA_THETA,
     GATE_NOOP_EPS,
+    GATE_VERSION,
     MODEL_ID,
 )
 from src.affective.affect_norm import clip_affect_norm
@@ -76,6 +79,46 @@ class ChatEngine:
         self._hook_handles: list = []
         self._last_affect_source = ""
 
+        # Phase 1B (docs/chat_hardening_plan.md): surface gate provenance so
+        # a random-init or stale-version gate can't silently masquerade as a
+        # working affective adapter in an interactive session.
+        self.gate_version: str | None = (
+            (self._gate_load.meta or {}).get("gate_version")
+            if self._gate_load.meta
+            else None
+        )
+        self.gate_healthy = (
+            self._gate_load.source == "trained" and self.gate_version == GATE_VERSION
+        )
+        warning = self.gate_health().get("warning")
+        if warning:
+            print(f"[chat] WARNING: {warning}", file=sys.stderr)
+
+    def gate_health(self) -> dict[str, Any]:
+        """Report gate checkpoint provenance for CLI /status and health checks."""
+        source = self._gate_load.source
+        warning: str | None = None
+        if source != "trained":
+            warning = (
+                f"gate checkpoint source={source!r} — no trained gate found; "
+                "hooks will inject an untrained (near-random) bias. Train "
+                "with `py -3 -m modal run train_gate.py` first."
+            )
+        elif self.gate_version != GATE_VERSION:
+            warning = (
+                f"gate checkpoint version={self.gate_version!r} does not match "
+                f"current config.GATE_VERSION={GATE_VERSION!r} — this checkpoint "
+                "predates or postdates the hardened v3.1 training/eval fixes; "
+                "behavior may not match docs/results.md."
+            )
+        return {
+            "source": source,
+            "version": self.gate_version,
+            "expected_version": GATE_VERSION,
+            "healthy": self.gate_healthy,
+            "warning": warning,
+        }
+
     def _should_modulate(self) -> bool:
         """AF-4: hooks only when strength > 0 and affect vector is non-neutral."""
         if self.session.hook_strength <= 0:
@@ -119,33 +162,22 @@ class ChatEngine:
             torch.from_numpy(np.asarray(clipped)).to(device=self.device, dtype=torch.float32)
         )
 
-    @torch.inference_mode()
-    def generate_reply(
+    def _generate_once(
         self,
-        user_text: str,
+        prompt: str,
         *,
-        max_new_tokens: int = CHAT_MAX_NEW_TOKENS,
-        temperature: float = 0.7,
-        return_introspection: bool = False,
+        max_new_tokens: int,
+        temperature: float,
+        hooks_enabled: bool,
+        want_introspection: bool,
     ) -> dict[str, Any]:
-        self.session.append("user", user_text)
-        messages = trim_messages_by_tokens(
-            self.tokenizer,
-            self.session.messages,
-            CHAT_MAX_HISTORY_TOKENS,
-        )
-        self.session.messages = messages
-
-        self.refresh_affect(force=True, messages=messages)
-
-        prompt = build_llama_prompt(self.tokenizer, messages, add_generation_prompt=True)
+        """Single generation pass; decodes new tokens only (no prompt leak)."""
         inputs = self.tokenizer(prompt, return_tensors="pt")
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
         prompt_len = inputs["input_ids"].shape[1]
 
         handles: list = []
-        introspection: dict[str, Any] | None = None
-        if self._should_modulate():
+        if hooks_enabled:
             handles = register_affective_hooks(
                 self.model,
                 self.gate,
@@ -163,14 +195,16 @@ class ChatEngine:
             gen_kwargs["temperature"] = temperature
         if DEFAULT_REPETITION_PENALTY > 1.0:
             gen_kwargs["repetition_penalty"] = DEFAULT_REPETITION_PENALTY
+
+        introspection: dict[str, Any] | None = None
         try:
-            if return_introspection and self._should_modulate():
+            if want_introspection and hooks_enabled:
                 from src.benchmark.affect_metrics import last_token_logits
 
                 logits_on = last_token_logits(self.model, self.tokenizer, prompt)
             out = self.model.generate(**inputs, **gen_kwargs)
         finally:
-            if return_introspection and self._should_modulate():
+            if want_introspection and hooks_enabled:
                 from src.benchmark.affect_metrics import (
                     kl_divergence_from_logits,
                     last_token_logits,
@@ -197,27 +231,126 @@ class ChatEngine:
 
         new_ids = out[0, prompt_len:]
         reply = self.tokenizer.decode(new_ids, skip_special_tokens=True).strip()
+
+        return {
+            "reply": reply,
+            "elapsed_sec": elapsed,
+            "hooks_active": hooks_enabled,
+            "introspection": introspection,
+        }
+
+    def _gate_output_norm(self) -> float:
+        vec = self.affect_state.get()
+        if vec is None:
+            return 0.0
+        with torch.no_grad():
+            return float(self.gate(vec).norm().item())
+
+    @torch.inference_mode()
+    def generate_reply(
+        self,
+        user_text: str,
+        *,
+        max_new_tokens: int = CHAT_MAX_NEW_TOKENS,
+        temperature: float = 0.7,
+        return_introspection: bool = False,
+    ) -> dict[str, Any]:
+        from src.benchmark.gate_holdout import collapse_score, detect_empathy_collapse
+
+        self.session.append("user", user_text)
+        messages = trim_messages_by_tokens(
+            self.tokenizer,
+            self.session.messages,
+            CHAT_MAX_HISTORY_TOKENS,
+        )
+        self.session.messages = messages
+
+        self.refresh_affect(force=True, messages=messages)
+
+        prompt = build_llama_prompt(self.tokenizer, messages, add_generation_prompt=True)
+        hooks_enabled = self._should_modulate()
+
+        # Phase 1A collapse guard (docs/chat_hardening_plan.md): chat allows
+        # up to CHAT_MAX_NEW_TOKENS=256, well past the 64-96 tokens exercised
+        # in training holdout, so a runtime check — not just the offline
+        # benchmark suite — is required before trusting live output.
+        attempt = self._generate_once(
+            prompt,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+            hooks_enabled=hooks_enabled,
+            want_introspection=return_introspection,
+        )
+        reply = attempt["reply"]
+        score = collapse_score(reply)
+        collapsed = detect_empathy_collapse(reply)
+        recovered = False
+
+        if collapsed and attempt["hooks_active"]:
+            # Retry once with hooks disabled — if the collapse only happens
+            # with affective modulation on, an inert reply is far better
+            # than a repetition loop.
+            retry = self._generate_once(
+                prompt,
+                max_new_tokens=max_new_tokens,
+                temperature=temperature,
+                hooks_enabled=False,
+                want_introspection=return_introspection,
+            )
+            if not detect_empathy_collapse(retry["reply"]):
+                attempt = retry
+                reply = retry["reply"]
+                score = collapse_score(reply)
+                collapsed = False
+                recovered = True
+
+        if collapsed:
+            # Either hooks were already off (collapse is not gate-related) or
+            # the hooks-off retry also collapsed — never surface raw looping
+            # text to the user.
+            reply = CHAT_COLLAPSE_FALLBACK_REPLY
+            score = 0.0
+
         self.session.append("assistant", reply)
+
+        vec = self.session.affect_vector
+        affect_norm = float(np.linalg.norm(vec)) if vec is not None else 0.0
+        turn_metrics = {
+            "turn_index": self.session.turn_index,
+            "new_text": reply,
+            "collapse_detected": collapsed,
+            "collapse_score": round(score, 4),
+            "recovered": recovered,
+            "hooks_active": attempt["hooks_active"],
+            "hook_strength": self.session.hook_strength,
+            "affect_vector_norm": round(affect_norm, 4),
+            "gate_output_norm": round(self._gate_output_norm(), 4),
+            "elapsed_sec": attempt["elapsed_sec"],
+        }
+        self.session.turn_metrics.append(turn_metrics)
 
         result = {
             "reply": reply,
             "traits": dict(self.session.traits),
             "dominant_tone": self.session.dominant_tone,
-            "elapsed_sec": elapsed,
+            "elapsed_sec": attempt["elapsed_sec"],
             "tribe_source": self._last_affect_source,
             "affect_source": self._last_affect_source,
             "encoder_source": self._encoder_load.source,
             "gate_source": self._gate_load.source,
+            "gate_version": self.gate_version,
+            "gate_healthy": self.gate_healthy,
             "amygdala_source": self._amygdala_load.source,
+            "collapse_detected": collapsed,
+            "collapse_score": round(score, 4),
+            "recovered": recovered,
         }
         if return_introspection:
+            introspection = attempt["introspection"]
             if introspection is None:
-                vec = self.session.affect_vector
                 introspection = {
-                    "affect_vector_norm": float(np.linalg.norm(vec))
-                    if vec is not None
-                    else 0.0,
-                    "hooks_on": False,
+                    "affect_vector_norm": affect_norm,
+                    "hooks_on": attempt["hooks_active"],
                     "rolling_kl_vs_hooks_off": 0.0,
                     "turn_index": self.session.turn_index,
                 }

@@ -30,12 +30,26 @@ class _FakeEngine:
             "affect_source": self._last_affect_source,
             "encoder_source": "encoder:test",
             "gate_source": "gate:test",
+            "gate_version": "v3.1_listener_ce_hardened",
+            "gate_healthy": True,
             "amygdala_source": "snn:test",
+            "collapse_detected": False,
+            "collapse_score": 0.0,
+            "recovered": False,
             "introspection": {
                 "hooks_on": False,
                 "rolling_kl_vs_hooks_off": 0.0,
                 "turn_index": 1,
             },
+        }
+
+    def gate_health(self):
+        return {
+            "source": "trained",
+            "version": "v3.1_listener_ce_hardened",
+            "expected_version": "v3.1_listener_ce_hardened",
+            "healthy": True,
+            "warning": None,
         }
 
     def cleanup(self):
@@ -66,6 +80,46 @@ def test_chat_returns_introspection(client):
     body = r.json()
     for key in ("reply", "source", "affect_vector", "introspection"):
         assert key in body
+
+
+def test_chat_returns_collapse_and_gate_fields(client):
+    """Phase 5 (docs/chat_hardening_plan.md): collapse guard + gate
+    provenance surfaced in the /chat response."""
+    r = client.post("/chat", json={"message": "I feel sad today.", "session_id": "s2b"})
+    assert r.status_code == 200
+    body = r.json()
+    for key in (
+        "collapse_detected",
+        "collapse_score",
+        "recovered",
+        "gate_version",
+        "gate_healthy",
+    ):
+        assert key in body
+    assert body["collapse_detected"] is False
+    assert body["gate_healthy"] is True
+
+
+def test_health_endpoint_reports_gate_provenance(client):
+    client.post("/chat", json={"message": "hello", "session_id": "s4"})
+    r = client.get("/health/s4")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert body["gate"]["healthy"] is True
+    assert body["gate"]["source"] == "trained"
+
+
+def test_health_endpoint_unknown_session():
+    from src.serve import microscope_api
+
+    microscope_api._sessions.clear()
+    from fastapi.testclient import TestClient
+
+    client = TestClient(microscope_api.app)
+    r = client.get("/health/no-such-session")
+    assert r.status_code == 200
+    assert r.json()["ok"] is False
 
 
 def test_reset_clears_session(client):

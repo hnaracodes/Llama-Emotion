@@ -35,6 +35,10 @@ class ChatSession:
     snn_mem_state: Any | None = None
     turn_index: int = 0
     affect_trajectory: list[list[float]] = field(default_factory=list)
+    # Phase 2C: per-assistant-turn diagnostics (new_text, collapse_score,
+    # collapse_detected, hook_strength, affect_vector_norm, gate_output_norm,
+    # hooks_active, recovered) appended by ChatEngine.generate_reply.
+    turn_metrics: list[dict[str, Any]] = field(default_factory=list)
 
     def append(self, role: Role, content: str) -> None:
         self.messages.append(ChatMessage(role=role, content=content))
@@ -78,7 +82,10 @@ class ChatSession:
         )
 
     def to_log_dict(self) -> dict[str, Any]:
+        from src.config import CHAT_LOG_SCHEMA_VERSION
+
         return {
+            "chat_log_schema": CHAT_LOG_SCHEMA_VERSION,
             "messages": [
                 {"role": m.role, "content": m.content, "timestamp": m.timestamp}
                 for m in self.messages
@@ -89,4 +96,7 @@ class ChatSession:
             "affect_vector": (
                 self.affect_vector.tolist() if self.affect_vector is not None else None
             ),
+            # Schema v2: per-turn collapse/affect diagnostics — see
+            # docs/chat_hardening_plan.md Phase 2 Track C.
+            "turn_metrics": list(self.turn_metrics),
         }

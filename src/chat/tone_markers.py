@@ -177,3 +177,38 @@ def format_mood_summary(
         format_affect_line(traits),
     ]
     return "\n".join(lines)
+
+
+def format_collapse_warning(recovered: bool) -> str:
+    """Phase 2D (docs/chat_hardening_plan.md): banner when the collapse
+    guard in ChatEngine.generate_reply fired for the last turn."""
+    tag = "\033[33m[collapse guard]\033[0m" if color_enabled() else "[collapse guard]"
+    if recovered:
+        return f"{tag} affect-modulated reply collapsed; recovered with hooks disabled for this turn."
+    return f"{tag} reply collapsed even without hooks; returned a safe fallback response."
+
+
+def format_status(health: dict[str, Any], turn_metrics: list[dict[str, Any]] | None = None) -> str:
+    """Phase 2D: `/status` — gate provenance + last-turn diagnostics."""
+    lines = [
+        f"Gate version: {health.get('version') or 'unknown'} "
+        f"(expected {health.get('expected_version')})",
+        f"Gate source:  {health.get('source')}"
+        + ("  [OK]" if health.get("healthy") else "  [WARNING]"),
+    ]
+    if health.get("warning"):
+        lines.append(f"  ! {health['warning']}")
+    if turn_metrics:
+        last = turn_metrics[-1]
+        lines.append(
+            "Last turn: "
+            f"collapse={last.get('collapse_detected')} "
+            f"score={last.get('collapse_score')} "
+            f"recovered={last.get('recovered')} "
+            f"hooks_active={last.get('hooks_active')} "
+            f"affect_norm={last.get('affect_vector_norm')} "
+            f"gate_norm={last.get('gate_output_norm')}"
+        )
+    else:
+        lines.append("Last turn: (no turns yet)")
+    return "\n".join(lines)

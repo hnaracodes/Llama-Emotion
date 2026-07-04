@@ -33,6 +33,19 @@ class EmotionalChatWorker:
             self.tokenizer,
             hook_strength=CHAT_HOOK_STRENGTH,
         )
+        # Phase 4 (docs/chat_hardening_plan.md): a warm worker serving real
+        # users must fail fast rather than silently serve an untrained
+        # (random-init) gate — a version mismatch is only a warning, since
+        # that's still a real trained checkpoint, just possibly predating
+        # the v3.1 hardening pass.
+        health = self.engine.gate_health()
+        if health["source"] != "trained":
+            raise RuntimeError(
+                "EmotionalChatWorker refusing to serve: "
+                f"{health['warning']}"
+            )
+        if health["warning"]:
+            print(f"[EmotionalChatWorker] WARNING: {health['warning']}")
         # Initial affect from empty/synthetic transcript seed
         self.engine.session.dominant_tone = "neutral"
         self.engine.session.traits = {
@@ -65,6 +78,10 @@ class EmotionalChatWorker:
     @modal.method()
     def get_session_state(self) -> dict[str, Any]:
         return self.engine.session.to_log_dict()
+
+    @modal.method()
+    def get_health(self) -> dict[str, Any]:
+        return self.engine.gate_health()
 
     @modal.method()
     def save_session_artifact(self, filename: str = "phase_chat.json") -> str:

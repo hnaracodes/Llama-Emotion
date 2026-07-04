@@ -6,6 +6,23 @@ Gate v3.1 is **collapse-free in benchmarks**, but the live chat path (`chat.py`,
 
 ---
 
+## Status (updated 2026-07-04)
+
+| Phase | Status |
+|-------|--------|
+| 1A — collapse guard in `ChatEngine.generate_reply` | ✅ Implemented + unit-tested (`tests/test_chat_engine_collapse_guard.py`) |
+| 1B — gate load/version verification | ✅ Implemented (`ChatEngine.gate_health()`, Modal worker fail-fast in `setup()`) + unit-tested |
+| 2C — per-turn session metrics, schema v2 | ✅ Implemented (`ChatSession.turn_metrics`, `to_log_dict()["chat_log_schema"] == 2`) + unit-tested |
+| 2D — CLI collapse banner + `/status` | ✅ Implemented in `chat.py` / `src/chat/tone_markers.py` |
+| 3E — chat soak benchmark | ✅ Script written (`benchmark_phase_chat_soak.py`) — **not yet executed on Modal GPU**; no empirical 256-token/10-turn result yet |
+| 3F — no-GPU regression tests for soak | ✅ `tests/test_chat_soak_regression.py` |
+| 4 — Modal worker production hygiene | ✅ `setup()` fail-fasts on untrained gate, warns on version mismatch; `get_health()` method added |
+| 5 — Microscope API alignment | ✅ `/chat` returns collapse/gate fields; `/health/{session_id}` endpoint added + unit-tested |
+
+**Remaining before full sign-off:** run `py -3 -m modal run benchmark_phase_chat_soak.py` on GPU and confirm `summary.passed == true`, then update `data/README.md` "What we cannot claim yet" with the empirical result.
+
+---
+
 ## Current state
 
 | Component | Status |
@@ -17,14 +34,14 @@ Gate v3.1 is **collapse-free in benchmarks**, but the live chat path (`chat.py`,
 | Benchmark parity | Chat A/B uses same encoder→SNN→gate→hooks path; collapse detector fixed 2026-07-04 |
 | Tests | `tests/test_chat.py`, `tests/test_m1_engine.py`, `tests/test_microscope_api.py` — unit-level only |
 
-**Gaps:**
+**Gaps (original; see Status above for current state):**
 
-1. No runtime `detect_empathy_collapse` on chat replies (256-token generations).
-2. No automatic backoff (lower strength / disable hooks) when collapse is detected mid-session.
-3. No structured session log with per-turn `new_text`, collapse score, hook strength, affect norm.
-4. Modal worker has no health check that gate checkpoint is v3.1+ and loaded (not random-init noop).
-5. No long-turn soak test mirroring real chat (`CHAT_MAX_NEW_TOKENS=256`).
-6. Microscope API and CLI diverge slightly in defaults (temperature, introspection).
+1. ~~No runtime `detect_empathy_collapse` on chat replies (256-token generations).~~ Fixed — Phase 1A.
+2. ~~No automatic backoff (lower strength / disable hooks) when collapse is detected mid-session.~~ Fixed — Phase 1A (hooks-off retry).
+3. ~~No structured session log with per-turn `new_text`, collapse score, hook strength, affect norm.~~ Fixed — Phase 2C.
+4. ~~Modal worker has no health check that gate checkpoint is v3.1+ and loaded (not random-init noop).~~ Fixed — Phase 1B/4.
+5. No long-turn soak test **result** mirroring real chat (`CHAT_MAX_NEW_TOKENS=256`) — script exists (Phase 3E) but has not been run on GPU yet.
+6. Microscope API and CLI diverge slightly in defaults (temperature, introspection) — not yet addressed (low priority, P2).
 
 ---
 

@@ -87,6 +87,37 @@ def test_phase_chat_log_roundtrip(tmp_path):
     assert len(data["tone_timeline"]) == 1
 
 
+def test_to_log_dict_schema_v2_includes_turn_metrics(tmp_path):
+    """Phase 2C (docs/chat_hardening_plan.md): schema-versioned per-turn
+    collapse/affect diagnostics round-trip through to_log_dict()."""
+    from src.config import CHAT_LOG_SCHEMA_VERSION
+
+    s = ChatSession()
+    s.append("user", "I lost my job today.")
+    s.append("assistant", "That's a lot to carry.")
+    s.turn_metrics.append(
+        {
+            "turn_index": 1,
+            "new_text": "That's a lot to carry.",
+            "collapse_detected": False,
+            "collapse_score": 0.0,
+            "recovered": False,
+            "hooks_active": True,
+            "hook_strength": 1.0,
+            "affect_vector_norm": 0.42,
+            "gate_output_norm": 0.05,
+            "elapsed_sec": 1.23,
+        }
+    )
+    out = tmp_path / "phase_chat.json"
+    out.write_text(json.dumps(s.to_log_dict(), indent=2), encoding="utf-8")
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert data["chat_log_schema"] == CHAT_LOG_SCHEMA_VERSION == 2
+    assert len(data["turn_metrics"]) == 1
+    assert data["turn_metrics"][0]["collapse_detected"] is False
+    assert data["turn_metrics"][0]["affect_vector_norm"] == 0.42
+
+
 def test_run_tribev2_from_transcript_fallback():
     from src.affective.tribev2_client import run_tribev2_from_transcript
 

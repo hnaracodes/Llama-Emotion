@@ -63,6 +63,19 @@ def reset_session(session_id: str = "default") -> dict[str, str]:
     return {"status": "reset", "session_id": session_id}
 
 
+@app.get("/health/{session_id}")
+def health(session_id: str = "default") -> dict[str, Any]:
+    """Phase 5 (docs/chat_hardening_plan.md): gate provenance for a live
+    session, so callers can detect an untrained/stale-version gate without
+    parsing a full chat response."""
+    if session_id not in _sessions:
+        return {"ok": False, "session_id": session_id, "reason": "no active session"}
+    engine = _sessions[session_id]
+    gate_health_fn = getattr(engine, "gate_health", None)
+    gate = gate_health_fn() if callable(gate_health_fn) else {}
+    return {"ok": True, "session_id": session_id, "gate": gate}
+
+
 @app.post("/chat")
 def chat(req: ChatRequest) -> dict[str, Any]:
     engine = _get_engine(req.session_id)
@@ -73,9 +86,14 @@ def chat(req: ChatRequest) -> dict[str, Any]:
         "source": result.get("affect_source", ""),
         "encoder_source": result.get("encoder_source"),
         "gate_source": result.get("gate_source"),
+        "gate_version": result.get("gate_version"),
+        "gate_healthy": result.get("gate_healthy"),
         "amygdala_source": result.get("amygdala_source"),
         "dominant_tone": result.get("dominant_tone"),
         "traits": result.get("traits"),
         "affect_vector": vec.tolist() if vec is not None else None,
+        "collapse_detected": result.get("collapse_detected", False),
+        "collapse_score": result.get("collapse_score", 0.0),
+        "recovered": result.get("recovered", False),
         "introspection": result.get("introspection", {}),
     }
