@@ -468,6 +468,14 @@ class ChatEngine:
             "after_tone": after_tone,
         }
 
+    def reset_conversation(self) -> None:
+        """Clear transcript and affect state; keep model, gate, and hook strength."""
+        hook_strength = self.session.hook_strength
+        self.session = ChatSession(hook_strength=hook_strength)
+        self.affect_state.zero()
+        self.amygdala.reset_state()
+        self._last_affect_source = ""
+
     def cleanup(self) -> None:
         for h in self._hook_handles:
             h.remove()

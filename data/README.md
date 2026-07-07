@@ -204,6 +204,19 @@ py -3 run_microscope.py
 # GET  http://localhost:8765/health/demo   -> gate provenance for that session
 ```
 
+**Web chat UI (React + Vite):**
+
+```powershell
+# Local: API + dev server (see web/README.md)
+py -3 run_microscope.py
+cd web && npm install && npm run dev
+# http://localhost:5173
+
+# Production: GPU API + static SPA on Modal
+cd web && npm run build && cd ..
+py -3 -m modal deploy run_web_serve.py
+```
+
 **Local (CI / fixture smoke tests):**
 
 ```powershell

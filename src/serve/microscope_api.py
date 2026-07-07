@@ -2,14 +2,30 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any, Callable
 
 from fastapi import FastAPI
-from pydantic import BaseModel, Field
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 app = FastAPI(title="Llama-Emotion Microscope")
 
+# Allow the Vite/React web UI (local dev + deployed static origin).
+_cors_origins = os.environ.get(
+    "CHAT_CORS_ORIGINS",
+    "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000",
+).split(",")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[o.strip() for o in _cors_origins if o.strip()],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 _engine_factory: Callable[[], Any] | None = None
+_shared_engine: Any | None = None
 _sessions: dict[str, Any] = {}
 
 
@@ -24,7 +40,15 @@ def set_engine_factory(factory: Callable[[], Any] | None) -> None:
     _engine_factory = factory
 
 
+def set_shared_engine(engine: Any | None) -> None:
+    """Production hook: one warm ChatEngine (Modal GPU worker / web deploy)."""
+    global _shared_engine
+    _shared_engine = engine
+
+
 def _get_engine(session_id: str):
+    if _shared_engine is not None:
+        return _shared_engine
     if session_id not in _sessions:
         if _engine_factory is not None:
             _sessions[session_id] = _engine_factory()
@@ -55,12 +79,34 @@ def get_state(session_id: str = "default") -> dict[str, Any]:
     }
 
 
+def _gate_health_from_engine(engine: Any) -> dict[str, Any]:
+    gate_health_fn = getattr(engine, "gate_health", None)
+    return gate_health_fn() if callable(gate_health_fn) else {}
+
+
 @app.post("/reset/{session_id}")
 def reset_session(session_id: str = "default") -> dict[str, str]:
+    if _shared_engine is not None:
+        reset_fn = getattr(_shared_engine, "reset_conversation", None)
+        if callable(reset_fn):
+            reset_fn()
+        return {"status": "reset", "session_id": session_id}
     if session_id in _sessions:
         eng = _sessions.pop(session_id)
         eng.cleanup()
     return {"status": "reset", "session_id": session_id}
+
+
+@app.get("/health")
+def health_global() -> dict[str, Any]:
+    """Liveness + aggregate gate status (no session required)."""
+    if _shared_engine is not None:
+        gate = _gate_health_from_engine(_shared_engine)
+        return {"ok": True, "sessions": 1, "shared": True, "gate": gate}
+    if not _sessions:
+        return {"ok": True, "sessions": 0, "gate": None}
+    gate = _gate_health_from_engine(next(iter(_sessions.values())))
+    return {"ok": True, "sessions": len(_sessions), "gate": gate}
 
 
 @app.get("/health/{session_id}")
@@ -68,11 +114,12 @@ def health(session_id: str = "default") -> dict[str, Any]:
     """Phase 5 (docs/chat_hardening_plan.md): gate provenance for a live
     session, so callers can detect an untrained/stale-version gate without
     parsing a full chat response."""
+    if _shared_engine is not None:
+        gate = _gate_health_from_engine(_shared_engine)
+        return {"ok": True, "session_id": session_id, "shared": True, "gate": gate}
     if session_id not in _sessions:
         return {"ok": False, "session_id": session_id, "reason": "no active session"}
-    engine = _sessions[session_id]
-    gate_health_fn = getattr(engine, "gate_health", None)
-    gate = gate_health_fn() if callable(gate_health_fn) else {}
+    gate = _gate_health_from_engine(_sessions[session_id])
     return {"ok": True, "session_id": session_id, "gate": gate}
 
 

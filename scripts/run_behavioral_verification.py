@@ -57,6 +57,7 @@ def main() -> None:
 
     p = argparse.ArgumentParser()
     p.add_argument("--skip-train", action="store_true")
+    p.add_argument("--include-chat-soak", action="store_true")
     p.add_argument("--max-samples", type=int, default=500)
     p.add_argument("--epochs", type=int, default=3)
     args = p.parse_args()
@@ -83,6 +84,10 @@ def main() -> None:
 
     print("=== Chat A/B ===", flush=True)
     results["chat_ab"] = _modal("benchmark_phase_chat_ab.py")
+
+    if args.include_chat_soak:
+        print("=== Chat soak (10-turn, 256 tok) ===", flush=True)
+        results["chat_soak"] = _modal("benchmark_phase_chat_soak.py")
 
     out = _ROOT / "data" / "artifacts" / "behavioral_verification.json"
     out.parent.mkdir(parents=True, exist_ok=True)

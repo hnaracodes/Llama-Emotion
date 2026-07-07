@@ -15,6 +15,7 @@ class _FakeSession:
     dominant_tone = "neutral"
     turn_index = 1
     affect_trajectory: list = []
+    messages: list = []
 
 
 class _FakeEngine:
@@ -51,6 +52,9 @@ class _FakeEngine:
             "healthy": True,
             "warning": None,
         }
+
+    def reset_conversation(self):
+        self.session = _FakeSession()
 
     def cleanup(self):
         pass
@@ -120,6 +124,49 @@ def test_health_endpoint_unknown_session():
     r = client.get("/health/no-such-session")
     assert r.status_code == 200
     assert r.json()["ok"] is False
+
+
+def test_health_global_without_session(client):
+    r = client.get("/health")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert "sessions" in body
+
+
+def test_health_global_with_shared_engine():
+    from src.serve import microscope_api
+
+    microscope_api._sessions.clear()
+    microscope_api.set_engine_factory(None)
+    fake = _FakeEngine()
+    microscope_api.set_shared_engine(fake)
+    try:
+        client = TestClient(microscope_api.app)
+        r = client.get("/health")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["ok"] is True
+        assert body["shared"] is True
+        assert body["gate"]["healthy"] is True
+    finally:
+        microscope_api.set_shared_engine(None)
+
+
+def test_reset_shared_engine_clears_without_sessions():
+    from src.serve import microscope_api
+
+    microscope_api._sessions.clear()
+    fake = _FakeEngine()
+    fake.session.messages = ["stub"]
+    microscope_api.set_shared_engine(fake)
+    try:
+        client = TestClient(microscope_api.app)
+        r = client.post("/reset/demo")
+        assert r.status_code == 200
+        assert len(fake.session.messages) == 0
+    finally:
+        microscope_api.set_shared_engine(None)
 
 
 def test_reset_clears_session(client):

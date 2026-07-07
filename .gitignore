@@ -17,3 +17,5 @@ behavioral_verify*
 chat_ab_rerun*
 gate_v31_*
 modal_retrain.pid
+web/node_modules/
+web/dist/
