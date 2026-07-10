@@ -21,22 +21,20 @@ from src.config import CHAT_HOOK_STRENGTH
 
 _PROJECT_ROOT = Path(__file__).resolve().parent
 _WEB_DIST = _PROJECT_ROOT / "web" / "dist"
+_WEB_REMOTE = "/opt/saa/web/dist"
 
-# FastAPI + static SPA; bake dist when built before deploy.
-_serve_image = image.pip_install("fastapi>=0.115.0", "uvicorn[standard]>=0.30.0")
+# SPA files must be the last image layer (no build steps after add_local_*).
+_serve_image = image
 if (_WEB_DIST / "index.html").is_file():
-    _serve_image = _serve_image.add_local_dir(
-        _WEB_DIST,
-        remote_path="/opt/saa/web/dist",
-    )
+    _serve_image = image.add_local_dir(_WEB_DIST, remote_path=_WEB_REMOTE)
 
 
 @app.cls(
     image=_serve_image,
     **gpu_kwargs(),
     scaledown_window=600,
-    allow_concurrent_inputs=8,
 )
+@modal.concurrent(max_inputs=8)
 class WebChatServer:
     """Single warm GPU container serving HTTP chat + affect introspection."""
 
@@ -67,7 +65,7 @@ class WebChatServer:
 
         from src.serve.microscope_api import app as api
 
-        static_root = Path("/opt/saa/web/dist")
+        static_root = Path(_WEB_REMOTE)
         if static_root.is_dir() and (static_root / "index.html").is_file():
             api.mount(
                 "/",

@@ -42,6 +42,8 @@ image = (
         "huggingface-hub>=0.24.0",
         "sentencepiece>=0.2.0",
         "protobuf>=4.25.0",
+        "fastapi>=0.115.0",
+        "uvicorn[standard]>=0.30.0",
     )
     .env(_hf_env)
 )
@@ -71,6 +73,12 @@ affective_image = image.pip_install(
     "einops>=0.7.0",
     "sentence-transformers>=3.0.0",
 )
+
+# Mount local package for Modal functions (before data dirs so add_local_* stays last).
+image = image.add_local_python_source("src")
+vllm_image = vllm_image.add_local_python_source("src")
+affective_image = affective_image.add_local_python_source("src")
+
 if (_BAKED_DATA / "scenarios").is_dir():
     affective_image = affective_image.add_local_dir(
         _BAKED_DATA / "scenarios",
@@ -81,11 +89,6 @@ if (_BAKED_DATA / "lexicon").is_dir():
         _BAKED_DATA / "lexicon",
         remote_path="/opt/saa/data/lexicon",
     )
-
-# Mount local package for Modal functions
-image = image.add_local_python_source("src")
-vllm_image = vllm_image.add_local_python_source("src")
-affective_image = affective_image.add_local_python_source("src")
 
 
 def hf_secret() -> modal.Secret:
